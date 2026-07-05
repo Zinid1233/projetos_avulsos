@@ -16,9 +16,10 @@ const SCHEMA = {
           nome: { type: "string", description: "Nome ou descrição curta do material" },
           comprimento_cm: { type: "number", description: "Maior lado no piso, em centímetros" },
           largura_cm: { type: "number", description: "Menor lado no piso, em centímetros" },
+          altura_cm: { type: "number", description: "Altura em centímetros; 0 se não informada" },
           quantidade: { type: "integer", description: "Quantidade de peças; 1 se não informado" },
         },
-        required: ["nome", "comprimento_cm", "largura_cm", "quantidade"],
+        required: ["nome", "comprimento_cm", "largura_cm", "altura_cm", "quantidade"],
         additionalProperties: false,
       },
     },
@@ -39,7 +40,8 @@ materiais NÃO podem ser empilhados — só interessa a área ocupada no chão.
 
 Regras:
 - Converta tudo para CENTÍMETROS. Se a imagem estiver em mm, divida por 10; se em metros, multiplique por 100.
-- comprimento_cm = maior lado; largura_cm = menor lado. Ignore a altura.
+- comprimento_cm = maior lado no piso; largura_cm = menor lado no piso.
+- altura_cm = altura da peça se estiver na imagem; use 0 se não houver altura informada.
 - Se houver quantidade indicada (ex.: "x4", "4 peças"), use-a; caso contrário, use 1.
 - Se um valor estiver ilegível, faça a melhor estimativa e registre isso em "observacao".
 - Retorne apenas os materiais realmente presentes na imagem.`;

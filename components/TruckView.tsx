@@ -132,6 +132,20 @@ export default function TruckView({
                   style={{ pointerEvents: "none" }}
                 >
                   {p.nome.length > 10 ? p.nome.slice(0, 9) + "…" : p.nome}
+                  {p.pilha > 1 ? ` ×${p.pilha}` : ""}
+                </text>
+              )}
+              {p.pilha > 1 && !mostraTexto && w > 16 && h > 12 && (
+                <text
+                  x={x + w / 2}
+                  y={y + h / 2}
+                  fontSize={9}
+                  fill="#ffffff"
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                  style={{ pointerEvents: "none" }}
+                >
+                  ×{p.pilha}
                 </text>
               )}
             </g>

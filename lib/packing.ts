@@ -36,7 +36,13 @@ interface PecaInterna {
   cor: string;
   along: number; // dimensão no eixo do comprimento do caminhão (m)
   across: number; // dimensão no eixo da largura do caminhão (m)
+  pilha: number; // peças empilhadas nesta posição
   foraDeMedida: boolean;
+}
+
+export interface OpcoesCubagem {
+  remontar: boolean; // materiais podem ser empilhados?
+  alturaMaxRemonte: number; // altura máxima de empilhamento (m)
 }
 
 /**
@@ -82,12 +88,30 @@ interface Prateleira {
 export function calcularCubagem(
   materiais: Material[],
   larguraPlanejamento: number,
+  opcoes: OpcoesCubagem = { remontar: false, alturaMaxRemonte: 0 },
 ): ResultadoCubagem {
   const pecasInternas: PecaInterna[] = [];
+  let volumeTotal = 0;
+  let totalPecas = 0;
 
   for (const m of materiais) {
     const qtd = Math.max(0, Math.floor(m.quantidade || 0));
-    for (let i = 0; i < qtd; i++) {
+    const altura = Math.max(0, m.altura || 0);
+    volumeTotal += m.comprimento * m.largura * altura * qtd;
+    totalPecas += qtd;
+    if (qtd === 0) continue;
+
+    // Quantas peças cabem empilhadas em uma posição do piso.
+    let porPilha = 1;
+    if (opcoes.remontar && altura > 0 && opcoes.alturaMaxRemonte > 0) {
+      porPilha = Math.max(1, Math.floor(opcoes.alturaMaxRemonte / altura));
+    }
+
+    const posicoes = Math.ceil(qtd / porPilha);
+    let restante = qtd;
+    for (let i = 0; i < posicoes; i++) {
+      const pilha = Math.min(porPilha, restante);
+      restante -= pilha;
       const o = orientar(m.comprimento, m.largura, larguraPlanejamento);
       pecasInternas.push({
         materialId: m.id,
@@ -95,6 +119,7 @@ export function calcularCubagem(
         cor: m.cor,
         along: o.along,
         across: o.across,
+        pilha,
         foraDeMedida: o.foraDeMedida,
       });
     }
@@ -135,6 +160,7 @@ export function calcularCubagem(
       y: prateleira.usado,
       comprimento: p.along,
       largura: p.across,
+      pilha: p.pilha,
     });
 
     prateleira.usado += p.across;
@@ -144,8 +170,10 @@ export function calcularCubagem(
     metrosLineares: Number(comprimentoTotal.toFixed(3)),
     larguraPlanejamento,
     areaTotal: Number(areaTotal.toFixed(3)),
+    volumeTotal: Number(volumeTotal.toFixed(4)),
     pecas,
-    totalPecas: pecasInternas.length,
+    totalPecas,
+    totalPosicoes: pecasInternas.length,
     pecaMaiorLargura: Number(pecaMaiorLargura.toFixed(3)),
     algumaForaDeMedida,
   };
