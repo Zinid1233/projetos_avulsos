@@ -1,96 +1,57 @@
-import { Material, Peca, ResultadoCubagem, Unidade } from "./types";
-
-/** Converte um valor para metros a partir da unidade informada. */
-export function paraMetros(valor: number, unidade: Unidade): number {
+// Conversão de unidade para metros.
+export function paraMetros(valor, unidade) {
   switch (unidade) {
     case "mm":
       return valor / 1000;
     case "cm":
       return valor / 100;
-    case "m":
+    default:
       return valor;
   }
 }
 
-/** Paleta de cores para os materiais na vista de cima. */
+// Paleta de cores para os materiais na vista de cima.
 export const PALETA = [
-  "#2563eb", // azul
-  "#16a34a", // verde
+  "#ef4444", // vermelho
   "#f59e0b", // âmbar
-  "#dc2626", // vermelho
-  "#7c3aed", // roxo
-  "#0891b2", // ciano
-  "#db2777", // rosa
-  "#65a30d", // lima
-  "#ea580c", // laranja
-  "#0d9488", // teal
+  "#3b82f6", // azul
+  "#22c55e", // verde
+  "#a855f7", // roxo
+  "#06b6d4", // ciano
+  "#ec4899", // rosa
+  "#84cc16", // lima
+  "#f97316", // laranja
+  "#14b8a6", // teal
 ];
 
-export function corPorIndice(indice: number): string {
+export function corPorIndice(indice) {
   return PALETA[indice % PALETA.length];
 }
 
-interface PecaInterna {
-  materialId: string;
-  nome: string;
-  cor: string;
-  along: number; // dimensão no eixo do comprimento do caminhão (m)
-  across: number; // dimensão no eixo da largura do caminhão (m)
-  pilha: number; // peças empilhadas nesta posição
-  foraDeMedida: boolean;
-}
-
-export interface OpcoesCubagem {
-  remontar: boolean; // materiais podem ser empilhados?
-  alturaMaxRemonte: number; // altura máxima de empilhamento (m)
-}
-
-/**
- * Orienta uma peça para caber na largura do caminhão.
- * Como não há empilhamento, giramos a peça no piso livremente.
- * Preferimos colocar o maior lado atravessado (across) quando ele couber,
- * pois isso reduz o comprimento ocupado (along).
- */
-function orientar(comp: number, larg: number, larguraCaminhao: number): {
-  along: number;
-  across: number;
-  foraDeMedida: boolean;
-} {
+// Orienta a peça para caber na largura do caminhão (gira livremente no piso).
+function orientar(comp, larg, larguraCaminhao) {
   const maior = Math.max(comp, larg);
   const menor = Math.min(comp, larg);
-
   if (maior <= larguraCaminhao) {
-    // maior lado cabe atravessado → across = maior, along = menor
     return { along: menor, across: maior, foraDeMedida: false };
   }
   if (menor <= larguraCaminhao) {
-    // só o menor lado cabe atravessado
     return { along: maior, across: menor, foraDeMedida: false };
   }
-  // nenhum lado cabe na largura — material fora de medida
   return { along: maior, across: menor, foraDeMedida: true };
 }
 
-interface Prateleira {
-  x0: number; // início no eixo do comprimento
-  altura: number; // profundidade da prateleira (along)
-  usado: number; // largura já ocupada (across)
-}
-
 /**
- * Calcula os metros lineares e o arranjo (vista de cima) de um conjunto de
- * materiais, considerando que nada empilha (só largura x comprimento no piso).
- *
- * Usa um empacotamento por prateleiras (First-Fit Decreasing Height): peças
- * são posicionadas lado a lado atravessando a largura; quando a largura enche,
- * abre-se uma nova faixa ao longo do comprimento.
+ * Calcula metros lineares, volume e o arranjo (vista de cima).
+ * materiais: [{id, nome, comprimento, largura, altura, quantidade, cor}] em metros.
+ * opcoes: { remontar, alturaMaxRemonte }
  */
 export function calcularCubagem(
-  materiais: Material[],
-  larguraPlanejamento: number,
-  opcoes: OpcoesCubagem = { remontar: false, alturaMaxRemonte: 0 },
-): ResultadoCubagem {
-  const pecasInternas: PecaInterna[] = [];
+  materiais,
+  larguraPlanejamento,
+  opcoes = { remontar: false, alturaMaxRemonte: 0 },
+) {
+  const pecasInternas = [];
   let volumeTotal = 0;
   let totalPecas = 0;
 
@@ -101,7 +62,6 @@ export function calcularCubagem(
     totalPecas += qtd;
     if (qtd === 0) continue;
 
-    // Quantas peças cabem empilhadas em uma posição do piso.
     let porPilha = 1;
     if (opcoes.remontar && altura > 0 && opcoes.alturaMaxRemonte > 0) {
       porPilha = Math.max(1, Math.floor(opcoes.alturaMaxRemonte / altura));
@@ -125,11 +85,10 @@ export function calcularCubagem(
     }
   }
 
-  // Ordena por profundidade (along) decrescente — melhora o aproveitamento.
   pecasInternas.sort((a, b) => b.along - a.along);
 
-  const prateleiras: Prateleira[] = [];
-  const pecas: Peca[] = [];
+  const prateleiras = [];
+  const pecas = [];
   let comprimentoTotal = 0;
   let areaTotal = 0;
   let pecaMaiorLargura = 0;
@@ -140,13 +99,11 @@ export function calcularCubagem(
     pecaMaiorLargura = Math.max(pecaMaiorLargura, Math.min(p.along, p.across));
     if (p.foraDeMedida) algumaForaDeMedida = true;
 
-    // procura a primeira prateleira onde a peça cabe (largura restante e profundidade)
     let prateleira = prateleiras.find(
       (s) => larguraPlanejamento - s.usado >= p.across - 1e-9 && s.altura >= p.along - 1e-9,
     );
 
     if (!prateleira) {
-      // nova prateleira ao final do comprimento atual
       prateleira = { x0: comprimentoTotal, altura: p.along, usado: 0 };
       prateleiras.push(prateleira);
       comprimentoTotal += p.along;

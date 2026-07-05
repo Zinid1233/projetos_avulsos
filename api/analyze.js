@@ -1,10 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { NextResponse } from "next/server";
 
-export const runtime = "nodejs";
-export const maxDuration = 60;
-
-// Schema esperado da extração de medidas a partir da imagem.
 const SCHEMA = {
   type: "object",
   properties: {
@@ -30,13 +25,13 @@ const SCHEMA = {
   },
   required: ["items", "observacao"],
   additionalProperties: false,
-} as const;
+};
 
 const PROMPT = `Você é um assistente de logística da transportadora Transfast.
 A imagem contém as medidas de um ou mais materiais que um cliente quer transportar.
 
 Extraia CADA material com suas medidas de PISO (comprimento e largura), pois os
-materiais NÃO podem ser empilhados — só interessa a área ocupada no chão.
+materiais NÃO podem ser empilhados por padrão — interessa a área ocupada no chão.
 
 Regras:
 - Converta tudo para CENTÍMETROS. Se a imagem estiver em mm, divida por 10; se em metros, multiplique por 100.
@@ -46,7 +41,7 @@ Regras:
 - Se um valor estiver ilegível, faça a melhor estimativa e registre isso em "observacao".
 - Retorne apenas os materiais realmente presentes na imagem.`;
 
-const MEDIA_TYPES: Record<string, "image/jpeg" | "image/png" | "image/gif" | "image/webp"> = {
+const MEDIA_TYPES = {
   "image/jpeg": "image/jpeg",
   "image/jpg": "image/jpeg",
   "image/png": "image/png",
@@ -54,31 +49,29 @@ const MEDIA_TYPES: Record<string, "image/jpeg" | "image/png" | "image/gif" | "im
   "image/webp": "image/webp",
 };
 
-export async function POST(req: Request) {
+export default async function handler(req, res) {
+  if (req.method !== "POST") {
+    res.status(405).json({ error: "Método não permitido" });
+    return;
+  }
+
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    return NextResponse.json(
-      {
-        error:
-          "Análise automática indisponível: configure a variável ANTHROPIC_API_KEY. Você pode lançar as medidas manualmente.",
-      },
-      { status: 503 },
-    );
+    res.status(503).json({
+      error:
+        "Análise automática indisponível: configure a variável ANTHROPIC_API_KEY. Você pode lançar as medidas manualmente.",
+    });
+    return;
   }
 
-  let body: { imageBase64?: string; mediaType?: string };
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Requisição inválida." }, { status: 400 });
-  }
-
+  const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
   const { imageBase64, mediaType } = body;
   if (!imageBase64) {
-    return NextResponse.json({ error: "Imagem não enviada." }, { status: 400 });
+    res.status(400).json({ error: "Imagem não enviada." });
+    return;
   }
 
-  const media = MEDIA_TYPES[(mediaType || "").toLowerCase()] ?? "image/jpeg";
+  const media = MEDIA_TYPES[(mediaType || "").toLowerCase()] || "image/jpeg";
 
   try {
     const client = new Anthropic({ apiKey });
@@ -98,21 +91,21 @@ export async function POST(req: Request) {
     });
 
     if (response.stop_reason === "refusal") {
-      return NextResponse.json(
-        { error: "Não foi possível analisar esta imagem. Lance as medidas manualmente." },
-        { status: 422 },
-      );
+      res.status(422).json({
+        error: "Não foi possível analisar esta imagem. Lance as medidas manualmente.",
+      });
+      return;
     }
 
     const textBlock = response.content.find((b) => b.type === "text");
-    if (!textBlock || textBlock.type !== "text") {
-      return NextResponse.json({ error: "Resposta vazia da análise." }, { status: 502 });
+    if (!textBlock) {
+      res.status(502).json({ error: "Resposta vazia da análise." });
+      return;
     }
 
-    const parsed = JSON.parse(textBlock.text);
-    return NextResponse.json(parsed);
+    res.status(200).json(JSON.parse(textBlock.text));
   } catch (err) {
     const message = err instanceof Error ? err.message : "Erro desconhecido na análise.";
-    return NextResponse.json({ error: `Falha na análise: ${message}` }, { status: 500 });
+    res.status(500).json({ error: `Falha na análise: ${message}` });
   }
 }

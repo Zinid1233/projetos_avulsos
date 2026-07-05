@@ -1,55 +1,49 @@
-# Transfast · Cubagem (metro linear)
+# Transfast · Cubagem
 
-Ferramenta para a transportadora **Transfast** calcular quantos **metros lineares**
-de piso um conjunto de materiais ocupa em um caminhão — considerando que os
-materiais **não empilham** (só largura × comprimento) — e indicar qual veículo
-atende (3/4, toco, truck, bitruck, carreta, bitrem, rodotrem…).
+Dashboard da transportadora **Transfast** para cubagem: calcula **metros lineares**
+(carga no piso, sem/com empilhamento) ou **volume (m³) + peso cubado**, mostra uma
+**vista de cima colorida** e indica o **veículo ideal** (3/4 a rodotrem).
 
-## O que faz
+Feito em **Vite + React** (JavaScript, CSS puro), tema preto/vermelho, sem login.
 
-- **Lançamento de medidas** em mm, cm ou m, com quantidade por material.
-- **📷 Adicionar arquivo**: envia uma foto com as medidas e o sistema lê os
-  valores automaticamente (via IA de visão) e preenche a lista.
-- **Cálculo de metros lineares** com empacotamento no piso (peças lado a lado
-  atravessando a largura útil; quando enche, avança no comprimento).
-- **Vista de cima colorida** dos materiais, com o limite do veículo escolhido.
-- **Comparação com a frota**: mostra em quais veículos a carga cabe, fica justa
-  ou não cabe (comprimento, largura e peso opcional).
+## Modos
+
+- **🚚 Medidas do veículo (metro linear):** materiais no piso sem empilhar. Se marcar
+  *"pode ser remontado"*, empilha até a altura informada (ou a altura do baú do veículo)
+  e recalcula os metros lineares; a vista mostra `×N` por pilha.
+- **📦 Medidas cúbicas (m³):** volume total (C×L×A×qtd) e **peso cubado**
+  (volume × fator, padrão ≈ 300 kg/m³), com volume por material.
 
 ## Rodando localmente
 
 ```bash
 npm install
 npm run dev
-# abre http://localhost:3000
+# abre http://localhost:5173
 ```
 
-## Análise automática de imagem (opcional)
+> A leitura de medidas por **foto** usa uma função serverless em `api/` — ela só roda
+> quando publicada na Vercel (ou via `vercel dev`). Localmente, use o lançamento manual.
 
-O botão "Adicionar arquivo" usa a API da Anthropic (Claude) para ler as medidas
-da foto. Para habilitar, defina a variável de ambiente:
+## Análise por imagem (opcional)
+
+O botão **📷 Adicionar arquivo** envia a foto para `api/analyze.js`, que usa a API da
+Anthropic (Claude) para ler as medidas. Configure na Vercel a variável:
 
 ```
-ANTHROPIC_API_KEY=sua-chave-aqui
+ANTHROPIC_API_KEY=sua-chave
 ```
 
-- **Local**: crie um arquivo `.env.local` com a linha acima.
-- **Vercel**: em *Project → Settings → Environment Variables*, adicione
-  `ANTHROPIC_API_KEY`.
-
-Sem a chave, o lançamento **manual** continua funcionando normalmente; apenas a
-leitura automática da imagem fica indisponível (com aviso na tela).
+Sem a chave, o app funciona 100% no modo manual.
 
 ## Deploy na Vercel
 
-O projeto é um app **Next.js** — a Vercel detecta e faz o build automaticamente.
-Basta importar o repositório e (opcionalmente) configurar `ANTHROPIC_API_KEY`.
+Framework **Vite** (detectado automaticamente). Build: `npm run build` · saída: `dist`.
+As funções em `api/` são servidas como serverless. Configure `ANTHROPIC_API_KEY` para a foto.
 
-## Ajustando a frota
+## Onde mexer
 
-As medidas úteis dos veículos ficam em [`lib/vehicles.ts`](lib/vehicles.ts) e
-podem ser ajustadas para a realidade da Transfast.
-
----
-
-Feito com Next.js + Tailwind. Cálculo e visualização em `lib/` e `components/`.
+- Interface: `src/pages/Cubagem.jsx` + `src/pages/Cubagem.css`
+- Cálculo: `src/lib/packing.js` · Frota/veículos: `src/lib/vehicles.js`
+- Vista de cima: `src/components/TruckView.jsx`
+- **Logo:** troque `src/assets/logo.svg` pelo logo da Transfast (o import está em `Cubagem.jsx`).

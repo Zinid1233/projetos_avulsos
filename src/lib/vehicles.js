@@ -1,11 +1,5 @@
-import { Veiculo } from "./types";
-
-/**
- * Frota de referência (medidas úteis aproximadas do compartimento de carga).
- * Valores editáveis conforme a realidade da Transfast — servem como base para
- * comparar com a cubagem calculada. Ordenados do menor para o maior.
- */
-export const VEICULOS: Veiculo[] = [
+// Frota de referência (medidas úteis aproximadas). Editável conforme a Transfast.
+export const VEICULOS = [
   { id: "3-4", nome: "3/4", eixos: "2 eixos", comprimento: 4.5, largura: 2.2, altura: 2.0, pesoMax: 3500 },
   { id: "toco", nome: "Toco", eixos: "2 eixos", comprimento: 7.0, largura: 2.4, altura: 2.4, pesoMax: 6000 },
   { id: "truck", nome: "Truck", eixos: "3 eixos", comprimento: 8.5, largura: 2.4, altura: 2.6, pesoMax: 12000 },
@@ -17,42 +11,23 @@ export const VEICULOS: Veiculo[] = [
   { id: "rodotrem", nome: "Rodotrem", eixos: "9 eixos", comprimento: 25.0, largura: 2.48, altura: 2.9, pesoMax: 45000 },
 ];
 
-export type StatusVeiculo = "cabe" | "justo" | "nao-cabe";
-
-export interface AvaliacaoVeiculo {
-  veiculo: Veiculo;
-  status: StatusVeiculo;
-  motivos: string[]; // razões quando não cabe ou fica justo
-  ocupacaoComprimento: number; // % do comprimento útil usado
-}
-
 /**
  * Avalia se a cubagem cabe em cada veículo.
- * @param metrosLineares metros de piso ocupados
- * @param maiorLargura maior largura de um material (m)
- * @param pesoTotal peso total em kg (0 = ignorar peso)
+ * Retorna [{ veiculo, status: 'cabe'|'justo'|'nao-cabe', motivos[], ocupacaoComprimento }]
  */
-export function avaliarVeiculos(
-  metrosLineares: number,
-  maiorLargura: number,
-  pesoTotal: number,
-): AvaliacaoVeiculo[] {
+export function avaliarVeiculos(metrosLineares, maiorLargura, pesoTotal) {
   return VEICULOS.map((veiculo) => {
-    const motivos: string[] = [];
+    const motivos = [];
 
     const cabeComprimento = metrosLineares <= veiculo.comprimento + 1e-6;
     const cabeLargura = maiorLargura <= veiculo.largura + 1e-6;
     const cabePeso = pesoTotal <= 0 || pesoTotal <= veiculo.pesoMax;
 
     if (!cabeComprimento) {
-      motivos.push(
-        `Faltam ${(metrosLineares - veiculo.comprimento).toFixed(2)} m de comprimento`,
-      );
+      motivos.push(`Faltam ${(metrosLineares - veiculo.comprimento).toFixed(2)} m de comprimento`);
     }
     if (!cabeLargura) {
-      motivos.push(
-        `Material com ${maiorLargura.toFixed(2)} m não cabe na largura de ${veiculo.largura} m`,
-      );
+      motivos.push(`Material com ${maiorLargura.toFixed(2)} m não cabe na largura de ${veiculo.largura} m`);
     }
     if (!cabePeso) {
       motivos.push(
@@ -64,7 +39,7 @@ export function avaliarVeiculos(
       ? (metrosLineares / veiculo.comprimento) * 100
       : 0;
 
-    let status: StatusVeiculo;
+    let status;
     if (!cabeComprimento || !cabeLargura || !cabePeso) {
       status = "nao-cabe";
     } else if (ocupacaoComprimento >= 90) {

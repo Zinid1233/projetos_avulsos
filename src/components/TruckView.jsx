@@ -1,18 +1,6 @@
-"use client";
-
-import { Peca } from "@/lib/types";
-
-interface Props {
-  pecas: Peca[];
-  larguraPlanejamento: number;
-  metrosLineares: number;
-  comprimentoVeiculo?: number; // se informado, desenha o limite do veículo escolhido
-  nomeVeiculo?: string;
-}
-
 /**
- * Vista de cima do piso do caminhão. O eixo horizontal é o comprimento
- * (metros lineares) e o vertical é a largura útil. Cada retângulo é uma peça.
+ * Vista de cima do piso do caminhão. Eixo horizontal = comprimento
+ * (metros lineares); vertical = largura útil. Cada retângulo é uma peça/pilha.
  */
 export default function TruckView({
   pecas,
@@ -20,15 +8,9 @@ export default function TruckView({
   metrosLineares,
   comprimentoVeiculo,
   nomeVeiculo,
-}: Props) {
-  const comprimentoDesenho = Math.max(
-    metrosLineares,
-    comprimentoVeiculo ?? 0,
-    1,
-  );
+}) {
+  const comprimentoDesenho = Math.max(metrosLineares, comprimentoVeiculo || 0, 1);
 
-  // Escala em px/m que respeita uma caixa máxima (largura e altura), para o
-  // piso manter proporção de caminhão em qualquer tamanho de carga.
   const padding = 44;
   const maxLarguraPx = 900;
   const maxAlturaPx = 300;
@@ -43,23 +25,23 @@ export default function TruckView({
     comprimentoVeiculo === undefined || metrosLineares <= comprimentoVeiculo + 1e-6;
 
   return (
-    <div className="w-full overflow-x-auto">
+    <div style={{ width: "100%", overflowX: "auto" }}>
       <svg
         viewBox={`0 0 ${larguraPx} ${alturaPx}`}
         width={larguraPx}
         height={alturaPx}
-        className="max-w-full h-auto"
+        style={{ maxWidth: "100%", height: "auto" }}
         role="img"
         aria-label="Vista de cima do carregamento"
       >
-        {/* piso do caminhão (largura de planejamento) */}
+        {/* piso */}
         <rect
           x={padding}
           y={padding}
           width={comprimentoDesenho * escala}
           height={larguraPlanejamento * escala}
-          fill="#f1f5f9"
-          stroke="#cbd5e1"
+          fill="#101010"
+          stroke="#2f2f2f"
           strokeWidth={2}
           rx={6}
         />
@@ -72,14 +54,14 @@ export default function TruckView({
               y1={padding}
               x2={padding + i * escala}
               y2={padding + larguraPlanejamento * escala}
-              stroke="#e2e8f0"
+              stroke="#242424"
               strokeWidth={1}
             />
             <text
               x={padding + i * escala}
               y={padding - 10}
               fontSize={11}
-              fill="#94a3b8"
+              fill="#7a7a7a"
               textAnchor="middle"
             >
               {i}m
@@ -87,14 +69,14 @@ export default function TruckView({
           </g>
         ))}
 
-        {/* limite do veículo escolhido */}
+        {/* limite do veículo */}
         {comprimentoVeiculo !== undefined && comprimentoVeiculo < comprimentoDesenho && (
           <line
             x1={padding + comprimentoVeiculo * escala}
             y1={padding - 4}
             x2={padding + comprimentoVeiculo * escala}
             y2={padding + larguraPlanejamento * escala + 4}
-            stroke="#dc2626"
+            stroke="#e11d2a"
             strokeWidth={2.5}
             strokeDasharray="8 5"
           />
@@ -115,9 +97,9 @@ export default function TruckView({
                 width={Math.max(w - 2, 1)}
                 height={Math.max(h - 2, 1)}
                 fill={p.cor}
-                fillOpacity={0.82}
-                stroke="#0f172a"
-                strokeOpacity={0.25}
+                fillOpacity={0.9}
+                stroke="#000"
+                strokeOpacity={0.35}
                 strokeWidth={1}
                 rx={3}
               />
@@ -126,7 +108,7 @@ export default function TruckView({
                   x={x + w / 2}
                   y={y + h / 2}
                   fontSize={10}
-                  fill="#ffffff"
+                  fill="#fff"
                   textAnchor="middle"
                   dominantBaseline="central"
                   style={{ pointerEvents: "none" }}
@@ -140,7 +122,7 @@ export default function TruckView({
                   x={x + w / 2}
                   y={y + h / 2}
                   fontSize={9}
-                  fill="#ffffff"
+                  fill="#fff"
                   textAnchor="middle"
                   dominantBaseline="central"
                   style={{ pointerEvents: "none" }}
@@ -157,7 +139,7 @@ export default function TruckView({
           x={14}
           y={padding + (larguraPlanejamento * escala) / 2}
           fontSize={11}
-          fill="#64748b"
+          fill="#7a7a7a"
           textAnchor="middle"
           transform={`rotate(-90 14 ${padding + (larguraPlanejamento * escala) / 2})`}
         >
@@ -166,7 +148,7 @@ export default function TruckView({
       </svg>
 
       {comprimentoVeiculo !== undefined && (
-        <p className={`mt-2 text-sm ${cabeNoVeiculo ? "text-green-600" : "text-red-600"}`}>
+        <p style={{ marginTop: 8, fontSize: 14, color: cabeNoVeiculo ? "var(--green)" : "var(--red)" }}>
           {cabeNoVeiculo
             ? `✓ Cabe no ${nomeVeiculo} (linha vermelha = fim do baú)`
             : `✗ Ultrapassa o ${nomeVeiculo} (linha vermelha = fim do baú)`}
