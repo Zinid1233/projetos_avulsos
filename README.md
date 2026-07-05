@@ -1,36 +1,55 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Transfast · Cubagem (metro linear)
 
-## Getting Started
+Ferramenta para a transportadora **Transfast** calcular quantos **metros lineares**
+de piso um conjunto de materiais ocupa em um caminhão — considerando que os
+materiais **não empilham** (só largura × comprimento) — e indicar qual veículo
+atende (3/4, toco, truck, bitruck, carreta, bitrem, rodotrem…).
 
-First, run the development server:
+## O que faz
+
+- **Lançamento de medidas** em mm, cm ou m, com quantidade por material.
+- **📷 Adicionar arquivo**: envia uma foto com as medidas e o sistema lê os
+  valores automaticamente (via IA de visão) e preenche a lista.
+- **Cálculo de metros lineares** com empacotamento no piso (peças lado a lado
+  atravessando a largura útil; quando enche, avança no comprimento).
+- **Vista de cima colorida** dos materiais, com o limite do veículo escolhido.
+- **Comparação com a frota**: mostra em quais veículos a carga cabe, fica justa
+  ou não cabe (comprimento, largura e peso opcional).
+
+## Rodando localmente
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+# abre http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Análise automática de imagem (opcional)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+O botão "Adicionar arquivo" usa a API da Anthropic (Claude) para ler as medidas
+da foto. Para habilitar, defina a variável de ambiente:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+ANTHROPIC_API_KEY=sua-chave-aqui
+```
 
-## Learn More
+- **Local**: crie um arquivo `.env.local` com a linha acima.
+- **Vercel**: em *Project → Settings → Environment Variables*, adicione
+  `ANTHROPIC_API_KEY`.
 
-To learn more about Next.js, take a look at the following resources:
+Sem a chave, o lançamento **manual** continua funcionando normalmente; apenas a
+leitura automática da imagem fica indisponível (com aviso na tela).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Deploy na Vercel
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+O projeto é um app **Next.js** — a Vercel detecta e faz o build automaticamente.
+Basta importar o repositório e (opcionalmente) configurar `ANTHROPIC_API_KEY`.
 
-## Deploy on Vercel
+## Ajustando a frota
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+As medidas úteis dos veículos ficam em [`lib/vehicles.ts`](lib/vehicles.ts) e
+podem ser ajustadas para a realidade da Transfast.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+---
+
+Feito com Next.js + Tailwind. Cálculo e visualização em `lib/` e `components/`.
