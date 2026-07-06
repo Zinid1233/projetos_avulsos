@@ -61,6 +61,7 @@ export default function Cubagem() {
   const [observacao, setObservacao] = useState("");
   const [resumo, setResumo] = useState(false);
   const [dataResumo, setDataResumo] = useState("");
+  const [posicoes, setPosicoes] = useState({});
   const inputArquivo = useRef(null);
 
   useEffect(() => {
@@ -87,10 +88,22 @@ export default function Cubagem() {
     [materiais, larguraPlanejamento, empilhando, alturaMaxRemonte],
   );
 
+  // Peças com posições manuais aplicadas (arrastar) e metros lineares efetivos.
+  const pecasFinais = useMemo(
+    () => resultado.pecas.map((p) => (posicoes[p.id] ? { ...p, ...posicoes[p.id] } : p)),
+    [resultado.pecas, posicoes],
+  );
+  const metrosLineares = useMemo(
+    () => Number(pecasFinais.reduce((mx, p) => Math.max(mx, p.x + p.comprimento), 0).toFixed(3)),
+    [pecasFinais],
+  );
+  const mover = (id, x, y) => setPosicoes((p) => ({ ...p, [id]: { x, y } }));
+  const refazer = () => setPosicoes({});
+
   const pesoNum = Number(pesoTotal) || 0;
   const avaliacoes = useMemo(
-    () => avaliarVeiculos(resultado.metrosLineares, resultado.pecaMaiorLargura, pesoNum, frota),
-    [resultado.metrosLineares, resultado.pecaMaiorLargura, pesoNum, frota],
+    () => avaliarVeiculos(metrosLineares, resultado.pecaMaiorLargura, pesoNum, frota),
+    [metrosLineares, resultado.pecaMaiorLargura, pesoNum, frota],
   );
 
   const pesoCubado = resultado.volumeTotal * fatorCubagem;
@@ -213,7 +226,7 @@ export default function Cubagem() {
   // ---------- Tela de resumo (salvar / imprimir) ----------
   if (resumo) {
     const cabeVeiculo =
-      modo === "veiculo" && veiculo ? resultado.metrosLineares <= veiculo.comprimento + 1e-6 : null;
+      modo === "veiculo" && veiculo ? metrosLineares <= veiculo.comprimento + 1e-6 : null;
     return (
       <div className="resumo-wrap">
         <div className="resumo-actions no-print">
@@ -248,7 +261,7 @@ export default function Cubagem() {
               <>
                 <div>
                   <span>Metros lineares</span>
-                  <b>{resultado.metrosLineares.toFixed(2)} m</b>
+                  <b>{metrosLineares.toFixed(2)} m</b>
                 </div>
                 <div>
                   <span>Área de piso</span>
@@ -308,11 +321,13 @@ export default function Cubagem() {
           {modo === "veiculo" && (
             <div className="folha-vista">
               <TruckView
-                pecas={resultado.pecas}
+                pecas={pecasFinais}
                 larguraPlanejamento={larguraPlanejamento}
-                metrosLineares={resultado.metrosLineares}
+                metrosLineares={metrosLineares}
                 comprimentoVeiculo={veiculo?.comprimento}
                 nomeVeiculo={veiculo?.nome}
+                fator={fator}
+                unidade={unidade}
                 claro
               />
             </div>
@@ -503,13 +518,27 @@ export default function Cubagem() {
 
           {modo === "veiculo" ? (
             <div className="card">
-              <h2 className="card-title">Vista de cima</h2>
+              <div className="toolbar" style={{ marginBottom: 8 }}>
+                <h2 className="card-title" style={{ margin: 0 }}>
+                  Vista de cima
+                </h2>
+                <button className="link" onClick={refazer} title="Refazer o arranjo automático">
+                  ↻ Refazer arranjo
+                </button>
+              </div>
+              <p className="muted" style={{ marginTop: 0, marginBottom: 10 }}>
+                Arraste os materiais para reposicionar. Passe o mouse para ver as medidas.
+              </p>
               <TruckView
-                pecas={resultado.pecas}
+                pecas={pecasFinais}
                 larguraPlanejamento={larguraPlanejamento}
-                metrosLineares={resultado.metrosLineares}
+                metrosLineares={metrosLineares}
                 comprimentoVeiculo={veiculo?.comprimento}
                 nomeVeiculo={veiculo?.nome}
+                fator={fator}
+                unidade={unidade}
+                editavel
+                onMover={mover}
               />
               {empilhando && (
                 <p className="muted" style={{ marginTop: 8 }}>
@@ -555,7 +584,7 @@ export default function Cubagem() {
             {modo === "veiculo" ? (
               <>
                 <div className="hero">
-                  <div className="hero-num">{resultado.metrosLineares.toFixed(2)} m</div>
+                  <div className="hero-num">{metrosLineares.toFixed(2)} m</div>
                   <div className="hero-label">metros lineares</div>
                 </div>
                 <dl className="dl">

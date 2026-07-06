@@ -1,6 +1,9 @@
+import { useRef } from "react";
+
 /**
- * Vista de cima do piso do caminhão. Eixo horizontal = comprimento
- * (metros lineares); vertical = largura útil. Cada retângulo é uma peça/pilha.
+ * Vista de cima do piso do caminhão. Cada retângulo é uma peça/pilha.
+ * Quando `editavel`, as peças podem ser arrastadas (chama `onMover(id, x, y)`).
+ * Ao passar o mouse aparecem as medidas; peças maiores mostram as medidas dentro.
  */
 export default function TruckView({
   pecas,
@@ -9,10 +12,14 @@ export default function TruckView({
   comprimentoVeiculo,
   nomeVeiculo,
   claro = false,
+  editavel = false,
+  onMover,
+  fator = 100,
+  unidade = "cm",
 }) {
-  const c = claro
-    ? { piso: "#f5f5f5", borda: "#cccccc", grade: "#e5e5e5", texto: "#888888", pecaTraco: "#00000055" }
-    : { piso: "#101010", borda: "#2f2f2f", grade: "#242424", texto: "#7a7a7a", pecaTraco: "#00000059" };
+  const svgRef = useRef(null);
+  const drag = useRef(null);
+
   const comprimentoDesenho = Math.max(metrosLineares, comprimentoVeiculo || 0, 1);
 
   const padding = 44;
@@ -28,17 +35,65 @@ export default function TruckView({
   const cabeNoVeiculo =
     comprimentoVeiculo === undefined || metrosLineares <= comprimentoVeiculo + 1e-6;
 
+  const c = claro
+    ? { piso: "#f5f5f5", borda: "#cccccc", grade: "#e5e5e5", texto: "#888888" }
+    : { piso: "#101010", borda: "#2f2f2f", grade: "#242424", texto: "#7a7a7a" };
+
+  const round = (v) => Math.round(v * fator);
+  // mostra sempre maior × menor (como o material foi informado)
+  const dims = (p) => {
+    const a = round(p.comprimento);
+    const b = round(p.largura);
+    return a >= b ? `${a}×${b}` : `${b}×${a}`;
+  };
+  const medida = (p) => `${dims(p)}${p.pilha > 1 ? ` ×${p.pilha}` : ""}`;
+
+  function pontoEmMetros(clientX, clientY) {
+    const svg = svgRef.current;
+    const pt = svg.createSVGPoint();
+    pt.x = clientX;
+    pt.y = clientY;
+    const loc = pt.matrixTransform(svg.getScreenCTM().inverse());
+    return { mx: (loc.x - padding) / escala, my: (loc.y - padding) / escala };
+  }
+
+  function aoPegar(e, p) {
+    if (!editavel || !onMover) return;
+    e.preventDefault();
+    const { mx, my } = pontoEmMetros(e.clientX, e.clientY);
+    drag.current = { id: p.id, offX: mx - p.x, offY: my - p.y, w: p.comprimento, h: p.largura };
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      /* ignora */
+    }
+  }
+  function aoArrastar(e) {
+    const d = drag.current;
+    if (!d) return;
+    const { mx, my } = pontoEmMetros(e.clientX, e.clientY);
+    const x = Math.max(0, mx - d.offX);
+    const y = Math.min(Math.max(0, my - d.offY), Math.max(0, larguraPlanejamento - d.h));
+    onMover(d.id, Number(x.toFixed(3)), Number(y.toFixed(3)));
+  }
+  function aoSoltar(e) {
+    if (drag.current) {
+      drag.current = null;
+      e.currentTarget.releasePointerCapture?.(e.pointerId);
+    }
+  }
+
   return (
     <div style={{ width: "100%", overflowX: "auto" }}>
       <svg
+        ref={svgRef}
         viewBox={`0 0 ${larguraPx} ${alturaPx}`}
         width={larguraPx}
         height={alturaPx}
-        style={{ maxWidth: "100%", height: "auto" }}
+        style={{ maxWidth: "100%", height: "auto", touchAction: editavel ? "none" : "auto" }}
         role="img"
         aria-label="Vista de cima do carregamento"
       >
-        {/* piso */}
         <rect
           x={padding}
           y={padding}
@@ -50,7 +105,6 @@ export default function TruckView({
           rx={6}
         />
 
-        {/* grade a cada 1 metro */}
         {Array.from({ length: Math.floor(comprimentoDesenho) + 1 }).map((_, i) => (
           <g key={`g${i}`}>
             <line
@@ -61,19 +115,12 @@ export default function TruckView({
               stroke={c.grade}
               strokeWidth={1}
             />
-            <text
-              x={padding + i * escala}
-              y={padding - 10}
-              fontSize={11}
-              fill={c.texto}
-              textAnchor="middle"
-            >
+            <text x={padding + i * escala} y={padding - 10} fontSize={11} fill={c.texto} textAnchor="middle">
               {i}m
             </text>
           </g>
         ))}
 
-        {/* limite do veículo */}
         {comprimentoVeiculo !== undefined && comprimentoVeiculo < comprimentoDesenho && (
           <line
             x1={padding + comprimentoVeiculo * escala}
@@ -86,15 +133,25 @@ export default function TruckView({
           />
         )}
 
-        {/* peças */}
-        {pecas.map((p, i) => {
+        {pecas.map((p) => {
           const w = p.comprimento * escala;
           const h = p.largura * escala;
           const x = padding + p.x * escala;
           const y = padding + p.y * escala;
-          const mostraTexto = w > 34 && h > 18;
+          const grande = w > 40 && h > 20;
+          const doisLinhas = grande && h > 38;
           return (
-            <g key={i}>
+            <g
+              key={p.id}
+              onPointerDown={(e) => aoPegar(e, p)}
+              onPointerMove={aoArrastar}
+              onPointerUp={aoSoltar}
+              style={{ cursor: editavel ? "grab" : "default" }}
+            >
+              <title>
+                {p.nome} — {dims(p)} {unidade}
+                {p.pilha > 1 ? ` (×${p.pilha} empilhado)` : ""}
+              </title>
               <rect
                 x={x + 1}
                 y={y + 1}
@@ -107,21 +164,38 @@ export default function TruckView({
                 strokeWidth={1}
                 rx={3}
               />
-              {mostraTexto && (
+              {grande && (
                 <text
                   x={x + w / 2}
-                  y={y + h / 2}
+                  y={doisLinhas ? y + h / 2 - 7 : y + h / 2}
                   fontSize={10}
                   fill="#fff"
                   textAnchor="middle"
                   dominantBaseline="central"
                   style={{ pointerEvents: "none" }}
                 >
-                  {p.nome.length > 10 ? p.nome.slice(0, 9) + "…" : p.nome}
-                  {p.pilha > 1 ? ` ×${p.pilha}` : ""}
+                  {doisLinhas
+                    ? p.nome.length > 12
+                      ? p.nome.slice(0, 11) + "…"
+                      : p.nome
+                    : medida(p)}
                 </text>
               )}
-              {p.pilha > 1 && !mostraTexto && w > 16 && h > 12 && (
+              {doisLinhas && (
+                <text
+                  x={x + w / 2}
+                  y={y + h / 2 + 8}
+                  fontSize={9}
+                  fill="#fff"
+                  fillOpacity={0.85}
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                  style={{ pointerEvents: "none" }}
+                >
+                  {medida(p)} {unidade}
+                </text>
+              )}
+              {!grande && p.pilha > 1 && w > 16 && h > 12 && (
                 <text
                   x={x + w / 2}
                   y={y + h / 2}
@@ -138,7 +212,6 @@ export default function TruckView({
           );
         })}
 
-        {/* rótulo da largura */}
         <text
           x={14}
           y={padding + (larguraPlanejamento * escala) / 2}

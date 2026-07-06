@@ -74,6 +74,7 @@ export function calcularCubagem(
       restante -= pilha;
       const o = orientar(m.comprimento, m.largura, larguraPlanejamento);
       pecasInternas.push({
+        id: `${m.id}#${i}`,
         materialId: m.id,
         nome: m.nome,
         cor: m.cor,
@@ -110,6 +111,7 @@ export function calcularCubagem(
     }
 
     pecas.push({
+      id: p.id,
       materialId: p.materialId,
       nome: p.nome,
       cor: p.cor,
