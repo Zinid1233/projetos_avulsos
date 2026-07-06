@@ -1,7 +1,15 @@
 // Função serverless (Vercel) que lê medidas de uma imagem usando o
 // Google Gemini (nível gratuito). A chave fica em GEMINI_API_KEY no servidor.
 
-const MODELO = "gemini-2.0-flash";
+// Tenta vários modelos do plano gratuito, em ordem, até um responder
+// (alguns podem estar com cota 0 dependendo da conta/região).
+const MODELOS = [
+  "gemini-2.5-flash",
+  "gemini-2.0-flash",
+  "gemini-2.5-flash-lite",
+  "gemini-2.0-flash-lite",
+  "gemini-1.5-flash",
+];
 
 const SCHEMA = {
   type: "OBJECT",
@@ -66,44 +74,57 @@ export default async function handler(req, res) {
     return;
   }
 
-  try {
-    const resp = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${MODELO}:generateContent`,
+  const corpo = JSON.stringify({
+    contents: [
       {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                { inline_data: { mime_type: mediaType || "image/jpeg", data: imageBase64 } },
-                { text: PROMPT },
-              ],
-            },
-          ],
-          generationConfig: {
-            temperature: 0,
-            responseMimeType: "application/json",
-            responseSchema: SCHEMA,
-          },
-        }),
+        parts: [
+          { inline_data: { mime_type: mediaType || "image/jpeg", data: imageBase64 } },
+          { text: PROMPT },
+        ],
       },
-    );
+    ],
+    generationConfig: {
+      temperature: 0,
+      responseMimeType: "application/json",
+      responseSchema: SCHEMA,
+    },
+  });
 
-    const dados = await resp.json();
-    if (!resp.ok) {
-      const msg = dados?.error?.message || "falha na API do Gemini";
-      res.status(502).json({ error: `Falha na leitura: ${msg}` });
-      return;
+  let ultimoErro = "falha na API do Gemini";
+
+  try {
+    for (const modelo of MODELOS) {
+      const resp = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+          body: corpo,
+        },
+      );
+
+      const dados = await resp.json();
+
+      if (resp.ok) {
+        const texto = dados?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!texto) {
+          res.status(502).json({ error: "A leitura não retornou dados. Tente outra foto." });
+          return;
+        }
+        res.status(200).json(JSON.parse(texto));
+        return;
+      }
+
+      ultimoErro = dados?.error?.message || `falha (${resp.status})`;
+      // 429 = cota/limite deste modelo → tenta o próximo; outros erros → para
+      if (resp.status !== 429) break;
     }
 
-    const texto = dados?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!texto) {
-      res.status(502).json({ error: "A leitura não retornou dados. Tente outra foto." });
-      return;
-    }
-
-    res.status(200).json(JSON.parse(texto));
+    res.status(502).json({
+      error:
+        `Nenhum modelo gratuito do Gemini está disponível para esta chave (cota 0). ` +
+        `Verifique no Google AI Studio se a chave tem plano gratuito ativo. Detalhe: ${ultimoErro}`,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "erro desconhecido";
     res.status(500).json({ error: `Erro na leitura: ${message}` });
