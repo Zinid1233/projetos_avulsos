@@ -92,22 +92,22 @@ export default function Cubagem() {
         const arquivo = arquivos[i];
         if (arquivos.length > 1) setProgresso(`${i + 1}/${arquivos.length}`);
         try {
-          const base64 = await lerBase64(arquivo);
+          const { base64, mediaType } = await imagemReduzida(arquivo);
           const resp = await fetch("/api/analyze", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ imageBase64: base64, mediaType: arquivo.type }),
+            body: JSON.stringify({ imageBase64: base64, mediaType }),
           });
           const texto = await resp.text();
           let dados;
           try {
             dados = JSON.parse(texto);
           } catch {
-            falhas.push(`${arquivo.name}: leitura indisponível`);
+            falhas.push(`${arquivo.name}: leitura indisponível (verifique a GEMINI_API_KEY na Vercel)`);
             continue;
           }
           if (!resp.ok) {
-            falhas.push(`${arquivo.name}: ${dados.error || "falha na análise"}`);
+            falhas.push(`${arquivo.name}: ${dados.error || "falha na leitura"}`);
             continue;
           }
           const items = dados.items || [];
@@ -121,7 +121,7 @@ export default function Cubagem() {
       if (coletados.length === 0) {
         setErroAnalise(
           falhas[0] ||
-            "Leitura por foto indisponível neste ambiente. Configure a ANTHROPIC_API_KEY na Vercel ou lance as medidas manualmente.",
+            "Não consegui identificar medidas na(s) imagem(ns). Lance as medidas manualmente.",
         );
         return;
       }
@@ -138,17 +138,39 @@ export default function Cubagem() {
       setMateriais(novos);
       setUnidade("cm");
 
-      const partes = [];
-      if (arquivos.length > 1) {
-        partes.push(`${coletados.length} itens de ${arquivos.length - falhas.length} arquivo(s).`);
-      }
+      const partes = [`${coletados.length} item(ns) lido(s) — confira os valores.`];
       if (observacoes.length) partes.push(observacoes.join(" · "));
-      setObsAnalise(partes.join(" — "));
+      setObsAnalise(partes.join(" "));
       if (falhas.length) setErroAnalise(`Não lido(s): ${falhas.join(" | ")}`);
     } finally {
       setAnalisando(false);
       setProgresso("");
     }
+  }
+
+  // Reduz a imagem (máx. 1600px) e devolve base64 JPEG — menor payload e mais rápido.
+  function imagemReduzida(arquivo, maxDim = 1600) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(arquivo);
+      const img = new Image();
+      img.onload = () => {
+        const escala = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * escala));
+        const h = Math.max(1, Math.round(img.height * escala));
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+        URL.revokeObjectURL(url);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+        resolve({ base64: dataUrl.split(",")[1], mediaType: "image/jpeg" });
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error("Não foi possível ler o arquivo."));
+      };
+      img.src = url;
+    });
   }
 
   return (
@@ -523,15 +545,3 @@ export default function Cubagem() {
   );
 }
 
-function lerBase64(arquivo) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const res = reader.result;
-      const virgula = res.indexOf(",");
-      resolve(virgula >= 0 ? res.slice(virgula + 1) : res);
-    };
-    reader.onerror = () => reject(new Error("Não foi possível ler o arquivo."));
-    reader.readAsDataURL(arquivo);
-  });
-}

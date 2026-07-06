@@ -25,21 +25,24 @@ npm run dev
 > A leitura de medidas por **foto** usa uma função serverless em `api/` — ela só roda
 > quando publicada na Vercel (ou via `vercel dev`). Localmente, use o lançamento manual.
 
-## Análise por imagem (opcional)
+## Leitura de medidas por imagem (grátis, opcional)
 
-O botão **📷 Adicionar arquivo** envia a foto para `api/analyze.js`, que usa a API da
-Anthropic (Claude) para ler as medidas. Configure na Vercel a variável:
+O botão **📷 Adicionar arquivo(s)** reduz a imagem no navegador e envia para
+`api/analyze.js`, que usa o **Google Gemini** (nível gratuito) para ler as medidas —
+funciona tanto em **tabelas / packing list** quanto em fotos soltas. Aceita vários
+arquivos de uma vez. Configure na Vercel a variável (chave **gratuita**, sem cartão):
 
 ```
-ANTHROPIC_API_KEY=sua-chave
+GEMINI_API_KEY=sua-chave-do-google-ai-studio
 ```
 
-Sem a chave, o app funciona 100% no modo manual.
+Gere a chave em https://aistudio.google.com/apikey (grátis). Sem a chave, o app
+funciona 100% no modo manual.
 
 ## Deploy na Vercel
 
 Framework **Vite** (detectado automaticamente). Build: `npm run build` · saída: `dist`.
-As funções em `api/` são servidas como serverless. Configure `ANTHROPIC_API_KEY` para a foto.
+As funções em `api/` são servidas como serverless. Configure `GEMINI_API_KEY` para a foto.
 
 ## Onde mexer
 
