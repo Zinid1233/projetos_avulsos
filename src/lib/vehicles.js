@@ -1,22 +1,34 @@
-// Frota de referência (medidas úteis aproximadas). Editável conforme a Transfast.
+// Tipos de carroceria. Fechada (baú/sider) tem altura interna e volume útil;
+// aberta (grade baixa/graneleiro) não tem teto fixo.
+export const CARROCERIAS = [
+  { id: "bau", nome: "Baú", fechado: true },
+  { id: "sider", nome: "Sider", fechado: true },
+  { id: "grade-baixa", nome: "Grade baixa", fechado: false },
+  { id: "graneleiro", nome: "Graneleiro", fechado: false },
+];
+
+export const carroceriaFechada = (id) => id === "bau" || id === "sider";
+export const nomeCarroceria = (id) => CARROCERIAS.find((c) => c.id === id)?.nome || "—";
+
+// Frota de referência (medidas úteis aproximadas, em metros). Editável pela Transfast.
 export const VEICULOS = [
-  { id: "3-4", nome: "3/4", eixos: "2 eixos", comprimento: 4.5, largura: 2.2, altura: 2.0, pesoMax: 3500 },
-  { id: "toco", nome: "Toco", eixos: "2 eixos", comprimento: 7.0, largura: 2.4, altura: 2.4, pesoMax: 6000 },
-  { id: "truck", nome: "Truck", eixos: "3 eixos", comprimento: 8.5, largura: 2.4, altura: 2.6, pesoMax: 12000 },
-  { id: "bitruck", nome: "Bitruck (4 eixos)", eixos: "4 eixos", comprimento: 10.0, largura: 2.45, altura: 2.7, pesoMax: 16000 },
-  { id: "carreta-simples", nome: "Carreta simples", eixos: "2 eixos", comprimento: 12.5, largura: 2.45, altura: 2.7, pesoMax: 25000 },
-  { id: "carreta-3", nome: "Carreta (3 eixos)", eixos: "3 eixos", comprimento: 14.0, largura: 2.48, altura: 2.9, pesoMax: 27000 },
-  { id: "carreta-5", nome: "Carreta 5 eixos (LS)", eixos: "5 eixos", comprimento: 15.0, largura: 2.48, altura: 2.9, pesoMax: 30000 },
-  { id: "bitrem", nome: "Bitrem", eixos: "7 eixos", comprimento: 19.0, largura: 2.48, altura: 2.9, pesoMax: 37000 },
-  { id: "rodotrem", nome: "Rodotrem", eixos: "9 eixos", comprimento: 25.0, largura: 2.48, altura: 2.9, pesoMax: 45000 },
+  { id: "3-4", nome: "3/4", eixos: "2 eixos", comprimento: 4.5, largura: 2.2, altura: 2.0, carroceria: "bau", pesoMax: 3500 },
+  { id: "toco", nome: "Toco", eixos: "2 eixos", comprimento: 7.0, largura: 2.4, altura: 2.4, carroceria: "bau", pesoMax: 6000 },
+  { id: "truck", nome: "Truck", eixos: "3 eixos", comprimento: 8.5, largura: 2.4, altura: 2.6, carroceria: "sider", pesoMax: 12000 },
+  { id: "bitruck", nome: "Bitruck (4 eixos)", eixos: "4 eixos", comprimento: 10.0, largura: 2.45, altura: 2.7, carroceria: "sider", pesoMax: 16000 },
+  { id: "carreta-simples", nome: "Carreta simples", eixos: "2 eixos", comprimento: 12.5, largura: 2.45, altura: 2.7, carroceria: "sider", pesoMax: 25000 },
+  { id: "carreta-3", nome: "Carreta (3 eixos)", eixos: "3 eixos", comprimento: 14.0, largura: 2.48, altura: 2.9, carroceria: "sider", pesoMax: 27000 },
+  { id: "carreta-5", nome: "Carreta 5 eixos (LS)", eixos: "5 eixos", comprimento: 15.0, largura: 2.48, altura: 2.9, carroceria: "sider", pesoMax: 30000 },
+  { id: "bitrem", nome: "Bitrem", eixos: "7 eixos", comprimento: 19.0, largura: 2.48, altura: 2.9, carroceria: "graneleiro", pesoMax: 37000 },
+  { id: "rodotrem", nome: "Rodotrem", eixos: "9 eixos", comprimento: 25.0, largura: 2.48, altura: 2.9, carroceria: "graneleiro", pesoMax: 45000 },
 ];
 
 /**
  * Avalia se a cubagem cabe em cada veículo.
  * Retorna [{ veiculo, status: 'cabe'|'justo'|'nao-cabe', motivos[], ocupacaoComprimento }]
  */
-export function avaliarVeiculos(metrosLineares, maiorLargura, pesoTotal) {
-  return VEICULOS.map((veiculo) => {
+export function avaliarVeiculos(metrosLineares, maiorLargura, pesoTotal, frota = VEICULOS) {
+  return frota.map((veiculo) => {
     const motivos = [];
 
     const cabeComprimento = metrosLineares <= veiculo.comprimento + 1e-6;

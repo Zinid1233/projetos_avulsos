@@ -1,7 +1,14 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { calcularCubagem, corPorIndice, paraMetros } from "../lib/packing.js";
-import { avaliarVeiculos, VEICULOS } from "../lib/vehicles.js";
+import {
+  avaliarVeiculos,
+  VEICULOS,
+  CARROCERIAS,
+  carroceriaFechada,
+  nomeCarroceria,
+} from "../lib/vehicles.js";
 import TruckView from "../components/TruckView.jsx";
+import NumInput from "../components/NumInput.jsx";
 import logo from "../assets/logo.svg";
 import "./Cubagem.css";
 
@@ -20,13 +27,29 @@ function novoMaterial(indice) {
   };
 }
 
+const FROTA_KEY = "transfast_frota_v1";
+function carregarFrota() {
+  try {
+    const s = localStorage.getItem(FROTA_KEY);
+    const arr = s ? JSON.parse(s) : null;
+    if (Array.isArray(arr) && arr.length) {
+      // completa campos que possam faltar em versões antigas
+      return arr.map((v) => ({ carroceria: "sider", altura: 2.7, ...v }));
+    }
+  } catch {
+    /* ignora */
+  }
+  return VEICULOS.map((v) => ({ ...v }));
+}
+
 export default function Cubagem() {
   const [modo, setModo] = useState("veiculo");
   const [materiais, setMateriais] = useState([novoMaterial(0)]);
   const [unidade, setUnidade] = useState("cm");
-  const [larguraPlanejamento, setLarguraPlanejamento] = useState(2.4);
-  const [pesoTotal, setPesoTotal] = useState("");
+  const [frota, setFrota] = useState(carregarFrota);
   const [veiculoSelecionado, setVeiculoSelecionado] = useState("");
+  const [larguraManual, setLarguraManual] = useState(2.4);
+  const [pesoTotal, setPesoTotal] = useState("");
   const [remontar, setRemontar] = useState(false);
   const [alturaMaxRemonte, setAlturaMaxRemonte] = useState(2.7);
   const [fatorCubagem, setFatorCubagem] = useState(300);
@@ -34,11 +57,23 @@ export default function Cubagem() {
   const [progresso, setProgresso] = useState("");
   const [erroAnalise, setErroAnalise] = useState("");
   const [obsAnalise, setObsAnalise] = useState("");
+  const [avisoConferir, setAvisoConferir] = useState(false);
   const inputArquivo = useRef(null);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(FROTA_KEY, JSON.stringify(frota));
+    } catch {
+      /* ignora */
+    }
+  }, [frota]);
 
   const fator = unidade === "mm" ? 1000 : unidade === "cm" ? 100 : 1;
   const empilhando = modo === "veiculo" && remontar;
   const mostrarAltura = modo === "cubico" || empilhando;
+
+  const veiculo = frota.find((v) => v.id === veiculoSelecionado);
+  const larguraPlanejamento = veiculo ? veiculo.largura : larguraManual;
 
   const resultado = useMemo(
     () =>
@@ -51,13 +86,21 @@ export default function Cubagem() {
 
   const pesoNum = Number(pesoTotal) || 0;
   const avaliacoes = useMemo(
-    () => avaliarVeiculos(resultado.metrosLineares, resultado.pecaMaiorLargura, pesoNum),
-    [resultado.metrosLineares, resultado.pecaMaiorLargura, pesoNum],
+    () => avaliarVeiculos(resultado.metrosLineares, resultado.pecaMaiorLargura, pesoNum, frota),
+    [resultado.metrosLineares, resultado.pecaMaiorLargura, pesoNum, frota],
   );
 
-  const veiculo = VEICULOS.find((v) => v.id === veiculoSelecionado);
   const pesoCubado = resultado.volumeTotal * fatorCubagem;
 
+  // Capacidade volumétrica do veículo selecionado (só carroceria fechada).
+  const capacidadeVol =
+    veiculo && carroceriaFechada(veiculo.carroceria)
+      ? veiculo.comprimento * veiculo.largura * veiculo.altura
+      : null;
+  const ocupacaoVol = capacidadeVol ? (resultado.volumeTotal / capacidadeVol) * 100 : null;
+  const cabeVol = capacidadeVol != null ? resultado.volumeTotal <= capacidadeVol + 1e-9 : null;
+
+  // ----- materiais -----
   function atualizar(id, campo, valor) {
     setMateriais((atual) => atual.map((m) => (m.id === id ? { ...m, [campo]: valor } : m)));
   }
@@ -72,6 +115,14 @@ export default function Cubagem() {
   }
   function remover(id) {
     setMateriais((atual) => (atual.length > 1 ? atual.filter((m) => m.id !== id) : atual));
+  }
+
+  // ----- veículos -----
+  function atualizarVeiculo(id, campo, valor) {
+    setFrota((f) => f.map((v) => (v.id === id ? { ...v, [campo]: valor } : v)));
+  }
+  function resetarFrota() {
+    setFrota(VEICULOS.map((v) => ({ ...v })));
   }
 
   async function aoEscolherArquivo(e) {
@@ -103,15 +154,14 @@ export default function Cubagem() {
           try {
             dados = JSON.parse(texto);
           } catch {
-            falhas.push(`${arquivo.name}: leitura indisponível (verifique a GEMINI_API_KEY na Vercel)`);
+            falhas.push(`${arquivo.name}: leitura indisponível (verifique a GEMINI_API_KEY)`);
             continue;
           }
           if (!resp.ok) {
             falhas.push(`${arquivo.name}: ${dados.error || "falha na leitura"}`);
             continue;
           }
-          const items = dados.items || [];
-          for (const it of items) coletados.push(it);
+          for (const it of dados.items || []) coletados.push(it);
           if (dados.observacao) observacoes.push(dados.observacao);
         } catch (err) {
           falhas.push(`${arquivo.name}: ${err instanceof Error ? err.message : "erro"}`);
@@ -120,25 +170,29 @@ export default function Cubagem() {
 
       if (coletados.length === 0) {
         setErroAnalise(
-          falhas[0] ||
-            "Não consegui identificar medidas na(s) imagem(ns). Lance as medidas manualmente.",
+          falhas[0] || "Não consegui identificar medidas na(s) imagem(ns). Lance manualmente.",
         );
         return;
       }
 
-      const novos = coletados.map((it, i) => ({
-        id: novoId(),
-        nome: it.nome || `Material ${i + 1}`,
-        comprimento: paraMetros(it.comprimento_cm || 0, "cm"),
-        largura: paraMetros(it.largura_cm || 0, "cm"),
-        altura: it.altura_cm ? paraMetros(it.altura_cm, "cm") : 0.5,
-        quantidade: Math.max(1, Math.floor(it.quantidade || 1)),
-        cor: corPorIndice(i),
-      }));
-      setMateriais(novos);
+      // SOMA à lista atual (mantém manuais e de outras fotos)
+      setMateriais((atual) => {
+        const base = atual.length;
+        const novos = coletados.map((it, i) => ({
+          id: novoId(),
+          nome: it.nome || `Material ${base + i + 1}`,
+          comprimento: paraMetros(it.comprimento_cm || 0, "cm"),
+          largura: paraMetros(it.largura_cm || 0, "cm"),
+          altura: it.altura_cm ? paraMetros(it.altura_cm, "cm") : 0.5,
+          quantidade: Math.max(1, Math.floor(it.quantidade || 1)),
+          cor: corPorIndice(base + i),
+        }));
+        return [...atual, ...novos];
+      });
       setUnidade("cm");
+      setAvisoConferir(true);
 
-      const partes = [`${coletados.length} item(ns) lido(s) — confira os valores.`];
+      const partes = [`${coletados.length} item(ns) adicionado(s).`];
       if (observacoes.length) partes.push(observacoes.join(" · "));
       setObsAnalise(partes.join(" "));
       if (falhas.length) setErroAnalise(`Não lido(s): ${falhas.join(" | ")}`);
@@ -146,31 +200,6 @@ export default function Cubagem() {
       setAnalisando(false);
       setProgresso("");
     }
-  }
-
-  // Reduz a imagem (máx. 1600px) e devolve base64 JPEG — menor payload e mais rápido.
-  function imagemReduzida(arquivo, maxDim = 1600) {
-    return new Promise((resolve, reject) => {
-      const url = URL.createObjectURL(arquivo);
-      const img = new Image();
-      img.onload = () => {
-        const escala = Math.min(1, maxDim / Math.max(img.width, img.height));
-        const w = Math.max(1, Math.round(img.width * escala));
-        const h = Math.max(1, Math.round(img.height * escala));
-        const canvas = document.createElement("canvas");
-        canvas.width = w;
-        canvas.height = h;
-        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-        URL.revokeObjectURL(url);
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
-        resolve({ base64: dataUrl.split(",")[1], mediaType: "image/jpeg" });
-      };
-      img.onerror = () => {
-        URL.revokeObjectURL(url);
-        reject(new Error("Não foi possível ler o arquivo."));
-      };
-      img.src = url;
-    });
   }
 
   return (
@@ -203,7 +232,6 @@ export default function Cubagem() {
       <div className="page">
         {/* Coluna principal */}
         <section className="col">
-          {/* Materiais */}
           <div className="card">
             <div className="toolbar">
               <h2 className="card-title" style={{ margin: 0 }}>
@@ -211,11 +239,7 @@ export default function Cubagem() {
               </h2>
               <div className="toolbar-right">
                 <span className="muted">Unidade:</span>
-                <select
-                  className="select"
-                  value={unidade}
-                  onChange={(e) => setUnidade(e.target.value)}
-                >
+                <select className="select" value={unidade} onChange={(e) => setUnidade(e.target.value)}>
                   <option value="mm">mm</option>
                   <option value="cm">cm</option>
                   <option value="m">m</option>
@@ -242,6 +266,15 @@ export default function Cubagem() {
               </div>
             </div>
 
+            {avisoConferir && (
+              <p className="alert alert-warn">
+                ⚠ Confira os valores lidos da imagem — a IA acerta muito, mas pode errar
+                quantidades ou medidas.
+                <button className="alert-x" onClick={() => setAvisoConferir(false)} title="Ok">
+                  ✕
+                </button>
+              </p>
+            )}
             {erroAnalise && <p className="alert alert-error">{erroAnalise}</p>}
             {obsAnalise && <p className="alert alert-info">🔍 {obsAnalise}</p>}
 
@@ -272,43 +305,37 @@ export default function Cubagem() {
                         />
                       </td>
                       <td>
-                        <input
+                        <NumInput
                           className="inp inp-num"
-                          type="number"
                           min={0}
                           value={exibir(m.comprimento)}
-                          onChange={(e) => definirDimensao(m.id, "comprimento", Number(e.target.value))}
+                          onChange={(n) => definirDimensao(m.id, "comprimento", n)}
                         />
                       </td>
                       <td>
-                        <input
+                        <NumInput
                           className="inp inp-num"
-                          type="number"
                           min={0}
                           value={exibir(m.largura)}
-                          onChange={(e) => definirDimensao(m.id, "largura", Number(e.target.value))}
+                          onChange={(n) => definirDimensao(m.id, "largura", n)}
                         />
                       </td>
                       {mostrarAltura && (
                         <td>
-                          <input
+                          <NumInput
                             className="inp inp-num"
-                            type="number"
                             min={0}
                             value={exibir(m.altura)}
-                            onChange={(e) => definirDimensao(m.id, "altura", Number(e.target.value))}
+                            onChange={(n) => definirDimensao(m.id, "altura", n)}
                           />
                         </td>
                       )}
                       <td>
-                        <input
+                        <NumInput
                           className="inp inp-qtd"
-                          type="number"
                           min={1}
                           value={m.quantidade}
-                          onChange={(e) =>
-                            atualizar(m.id, "quantidade", Math.max(1, Number(e.target.value)))
-                          }
+                          onChange={(n) => atualizar(m.id, "quantidade", Math.max(1, Math.floor(n)))}
                         />
                       </td>
                       <td style={{ textAlign: "right" }}>
@@ -327,7 +354,6 @@ export default function Cubagem() {
             </button>
           </div>
 
-          {/* Vista de cima (veículo) ou volume por material (cúbico) */}
           {modo === "veiculo" ? (
             <div className="card">
               <h2 className="card-title">Vista de cima</h2>
@@ -345,7 +371,7 @@ export default function Cubagem() {
               )}
               {resultado.algumaForaDeMedida && (
                 <p className="warn">
-                  ⚠ Algum material é mais largo que a largura de planejamento ({larguraPlanejamento} m).
+                  ⚠ Algum material é mais largo que a largura útil ({larguraPlanejamento} m).
                 </p>
               )}
             </div>
@@ -398,31 +424,31 @@ export default function Cubagem() {
                     </dd>
                   </div>
                   <div className="dl-row">
-                    <dt>Maior largura</dt>
+                    <dt>Largura útil</dt>
                     <dd>
-                      {(resultado.pecaMaiorLargura * fator).toFixed(0)} {unidade}
+                      {larguraPlanejamento} m{veiculo ? ` (${veiculo.nome})` : ""}
                     </dd>
                   </div>
                 </dl>
 
                 <div className="field-group">
-                  <label className="field">
-                    <span>Largura útil (m)</span>
-                    <input
-                      className="inp inp-mini"
-                      type="number"
-                      step={0.05}
-                      min={1}
-                      value={larguraPlanejamento}
-                      onChange={(e) => setLarguraPlanejamento(Number(e.target.value) || 2.4)}
-                    />
-                  </label>
+                  {!veiculo && (
+                    <label className="field">
+                      <span>Largura útil (m)</span>
+                      <NumInput
+                        className="inp inp-mini"
+                        min={0.5}
+                        value={larguraManual}
+                        onChange={(n) => setLarguraManual(n || 2.4)}
+                      />
+                    </label>
+                  )}
                   <label className="field">
                     <span>Peso total (kg)</span>
                     <input
                       className="inp inp-mini"
-                      type="number"
-                      min={0}
+                      type="text"
+                      inputMode="decimal"
                       placeholder="opcional"
                       value={pesoTotal}
                       onChange={(e) => setPesoTotal(e.target.value)}
@@ -442,18 +468,16 @@ export default function Cubagem() {
                       <div style={{ marginTop: 8, display: "grid", gap: 4 }}>
                         <label className="field">
                           <span>Empilhar até (m)</span>
-                          <input
+                          <NumInput
                             className="inp inp-mini"
-                            type="number"
-                            step={0.1}
                             min={0}
                             value={alturaMaxRemonte}
-                            onChange={(e) => setAlturaMaxRemonte(Number(e.target.value) || 0)}
+                            onChange={(n) => setAlturaMaxRemonte(n || 0)}
                           />
                         </label>
-                        {veiculo && (
+                        {veiculo && carroceriaFechada(veiculo.carroceria) && (
                           <button className="link" onClick={() => setAlturaMaxRemonte(veiculo.altura)}>
-                            ↧ usar altura do baú do {veiculo.nome} ({veiculo.altura} m)
+                            ↧ usar altura interna do {veiculo.nome} ({veiculo.altura} m)
                           </button>
                         )}
                       </div>
@@ -475,24 +499,50 @@ export default function Cubagem() {
                     </dd>
                   </div>
                   <div className="dl-row">
-                    <dt>Área de piso</dt>
-                    <dd>{resultado.areaTotal.toFixed(2)} m²</dd>
-                  </div>
-                  <div className="dl-row">
                     <dt>Total de peças</dt>
                     <dd>{resultado.totalPecas}</dd>
                   </div>
                 </dl>
+
+                {/* Cabe no veículo? (só carroceria fechada) */}
+                {veiculo && capacidadeVol != null ? (
+                  <div className={`capbox ${cabeVol ? "cap-ok" : "cap-no"}`}>
+                    <div className="cap-top">
+                      <span>
+                        {veiculo.nome} · {nomeCarroceria(veiculo.carroceria)}
+                      </span>
+                      <span className="cap-badge">{cabeVol ? "✓ cabe" : "✗ não cabe"}</span>
+                    </div>
+                    <div className="cap-bar">
+                      <div
+                        className="cap-fill"
+                        style={{ width: `${Math.min(100, ocupacaoVol).toFixed(0)}%` }}
+                      />
+                    </div>
+                    <div className="cap-meta">
+                      {resultado.volumeTotal.toFixed(2)} / {capacidadeVol.toFixed(2)} m³ interno ·{" "}
+                      {ocupacaoVol.toFixed(0)}%
+                    </div>
+                  </div>
+                ) : veiculo ? (
+                  <p className="muted" style={{ marginTop: 10 }}>
+                    {veiculo.nome} tem carroceria aberta ({nomeCarroceria(veiculo.carroceria)}) — sem
+                    limite de altura fixo para calcular volume interno.
+                  </p>
+                ) : (
+                  <p className="muted" style={{ marginTop: 10 }}>
+                    Selecione um veículo abaixo (baú/sider) para ver se a carga cabe pelo volume.
+                  </p>
+                )}
+
                 <div className="field-group">
                   <label className="field">
                     <span>Fator de cubagem (kg/m³)</span>
-                    <input
+                    <NumInput
                       className="inp inp-mini"
-                      type="number"
                       min={0}
-                      step={10}
                       value={fatorCubagem}
-                      onChange={(e) => setFatorCubagem(Number(e.target.value) || 0)}
+                      onChange={(n) => setFatorCubagem(n || 0)}
                     />
                   </label>
                   <p className="muted" style={{ margin: 0, fontSize: 12 }}>
@@ -503,45 +553,144 @@ export default function Cubagem() {
             )}
           </div>
 
-          {modo === "veiculo" && (
-            <div className="card">
-              <h2 className="card-title">Veículos</h2>
-              <p className="muted" style={{ marginTop: -6, marginBottom: 12 }}>
-                Clique para ver o limite na vista de cima.
-              </p>
-              <ul className="veic-list">
-                {avaliacoes.map(({ veiculo: v, status, motivos, ocupacaoComprimento }) => {
-                  const badge = status === "cabe" ? "✓" : status === "justo" ? "≈" : "✗";
-                  const ativo = v.id === veiculoSelecionado;
-                  return (
-                    <li key={v.id}>
-                      <button
-                        className={`veic ${status} ${ativo ? "ativo" : ""}`}
-                        onClick={() => setVeiculoSelecionado(ativo ? "" : v.id)}
-                      >
-                        <div className="veic-top">
-                          <span className="veic-nome">{v.nome}</span>
-                          <span className={`badge ${status}`}>{badge}</span>
-                        </div>
-                        <div className="veic-meta">
-                          <span>
-                            {v.comprimento} m · {v.largura} m · {v.altura} m · {(v.pesoMax / 1000).toFixed(0)} t
-                          </span>
-                          {status !== "nao-cabe" && <span>{ocupacaoComprimento.toFixed(0)}%</span>}
-                        </div>
-                        {status === "nao-cabe" && motivos[0] && (
-                          <div className="veic-motivo">{motivos[0]}</div>
-                        )}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
+          {/* Veículos (nos dois modos) */}
+          <div className="card">
+            <div className="toolbar" style={{ marginBottom: 8 }}>
+              <h2 className="card-title" style={{ margin: 0 }}>
+                Veículos
+              </h2>
+              <button className="link" onClick={resetarFrota} title="Voltar às medidas padrão">
+                restaurar padrão
+              </button>
             </div>
-          )}
+            <p className="muted" style={{ marginTop: 0, marginBottom: 12 }}>
+              Clique para selecionar e editar as medidas (em metros).
+            </p>
+            <ul className="veic-list">
+              {avaliacoes.map(({ veiculo: v, status, motivos, ocupacaoComprimento }) => {
+                const ativo = v.id === veiculoSelecionado;
+                const fechado = carroceriaFechada(v.carroceria);
+
+                // status exibido depende do modo
+                let cls = status;
+                let badge = status === "cabe" ? "✓" : status === "justo" ? "≈" : "✗";
+                if (modo === "cubico") {
+                  if (fechado) {
+                    const cap = v.comprimento * v.largura * v.altura;
+                    const cabe = resultado.volumeTotal <= cap + 1e-9;
+                    const oc = cap ? (resultado.volumeTotal / cap) * 100 : 0;
+                    cls = cabe ? (oc >= 90 ? "justo" : "cabe") : "nao-cabe";
+                    badge = cabe ? "✓" : "✗";
+                  } else {
+                    cls = "aberto";
+                    badge = "↑";
+                  }
+                }
+
+                return (
+                  <li key={v.id}>
+                    <button
+                      className={`veic ${cls} ${ativo ? "ativo" : ""}`}
+                      onClick={() => setVeiculoSelecionado(ativo ? "" : v.id)}
+                    >
+                      <div className="veic-top">
+                        <span className="veic-nome">{v.nome}</span>
+                        <span className={`badge ${cls}`}>{badge}</span>
+                      </div>
+                      <div className="veic-meta">
+                        <span>
+                          {v.comprimento}×{v.largura}
+                          {fechado ? `×${v.altura}` : ""} m · {nomeCarroceria(v.carroceria)} ·{" "}
+                          {(v.pesoMax / 1000).toFixed(0)} t
+                        </span>
+                        {modo === "veiculo" && status !== "nao-cabe" && (
+                          <span>{ocupacaoComprimento.toFixed(0)}%</span>
+                        )}
+                      </div>
+                      {modo === "veiculo" && status === "nao-cabe" && motivos[0] && (
+                        <div className="veic-motivo">{motivos[0]}</div>
+                      )}
+                    </button>
+
+                    {ativo && (
+                      <div className="veic-edit">
+                        <label className="field">
+                          <span>Comprimento (m)</span>
+                          <NumInput
+                            className="inp inp-mini"
+                            min={0.1}
+                            value={v.comprimento}
+                            onChange={(n) => atualizarVeiculo(v.id, "comprimento", n)}
+                          />
+                        </label>
+                        <label className="field">
+                          <span>Largura (m)</span>
+                          <NumInput
+                            className="inp inp-mini"
+                            min={0.1}
+                            value={v.largura}
+                            onChange={(n) => atualizarVeiculo(v.id, "largura", n)}
+                          />
+                        </label>
+                        <label className="field">
+                          <span>Carroceria</span>
+                          <select
+                            className="select"
+                            value={v.carroceria}
+                            onChange={(e) => atualizarVeiculo(v.id, "carroceria", e.target.value)}
+                          >
+                            {CARROCERIAS.map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.nome}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        {fechado && (
+                          <label className="field">
+                            <span>Altura interna (m)</span>
+                            <NumInput
+                              className="inp inp-mini"
+                              min={0.1}
+                              value={v.altura}
+                              onChange={(n) => atualizarVeiculo(v.id, "altura", n)}
+                            />
+                          </label>
+                        )}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         </aside>
       </div>
     </>
   );
-}
 
+  // Reduz a imagem (máx. 1600px) e devolve base64 JPEG.
+  function imagemReduzida(arquivo, maxDim = 1600) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(arquivo);
+      const img = new Image();
+      img.onload = () => {
+        const escala = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * escala));
+        const h = Math.max(1, Math.round(img.height * escala));
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+        URL.revokeObjectURL(url);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+        resolve({ base64: dataUrl.split(",")[1], mediaType: "image/jpeg" });
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error("Não foi possível ler o arquivo."));
+      };
+      img.src = url;
+    });
+  }
+}

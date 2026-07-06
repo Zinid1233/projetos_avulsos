@@ -209,6 +209,86 @@ table.mat td {
   background: rgba(59, 130, 246, 0.14);
   color: #93c5fd;
 }
+.alert-warn {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fcd34d;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.alert-x {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  opacity: 0.8;
+  font-size: 13px;
+}
+.alert-x:hover {
+  opacity: 1;
+}
+
+/* capacidade volumétrica (modo cúbico) */
+.capbox {
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #0c0c0c;
+}
+.capbox.cap-ok {
+  border-color: rgba(34, 197, 94, 0.5);
+}
+.capbox.cap-no {
+  border-color: rgba(225, 29, 42, 0.5);
+}
+.cap-top {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+.cap-badge {
+  font-weight: 700;
+}
+.cap-ok .cap-badge {
+  color: var(--green);
+}
+.cap-no .cap-badge {
+  color: var(--red);
+}
+.cap-bar {
+  height: 8px;
+  border-radius: 6px;
+  background: #1e1e1e;
+  overflow: hidden;
+}
+.cap-fill {
+  height: 100%;
+  background: var(--green);
+}
+.cap-no .cap-fill {
+  background: var(--red);
+}
+.cap-meta {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 5px;
+}
+
+/* edição de veículo */
+.veic-edit {
+  margin: 6px 0 2px;
+  padding: 10px 12px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+}
+.veic-edit .field span {
+  color: var(--text-dim);
+}
 .warn {
   color: #fca5a5;
   font-size: 14px;
@@ -347,6 +427,12 @@ table.mat td {
 }
 .veic.nao-cabe {
   border-left: 3px solid var(--red);
+}
+.veic.aberto {
+  border-left: 3px solid #64748b;
+}
+.badge.aberto {
+  color: #94a3b8;
 }
 .veic-top {
   display: flex;
