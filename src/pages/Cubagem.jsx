@@ -31,6 +31,7 @@ export default function Cubagem() {
   const [alturaMaxRemonte, setAlturaMaxRemonte] = useState(2.7);
   const [fatorCubagem, setFatorCubagem] = useState(300);
   const [analisando, setAnalisando] = useState(false);
+  const [progresso, setProgresso] = useState("");
   const [erroAnalise, setErroAnalise] = useState("");
   const [obsAnalise, setObsAnalise] = useState("");
   const inputArquivo = useRef(null);
@@ -74,40 +75,58 @@ export default function Cubagem() {
   }
 
   async function aoEscolherArquivo(e) {
-    const arquivo = e.target.files?.[0];
+    const arquivos = Array.from(e.target.files || []);
     e.target.value = "";
-    if (!arquivo) return;
+    if (arquivos.length === 0) return;
 
     setErroAnalise("");
     setObsAnalise("");
     setAnalisando(true);
+
+    const coletados = [];
+    const observacoes = [];
+    const falhas = [];
+
     try {
-      const base64 = await lerBase64(arquivo);
-      const resp = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageBase64: base64, mediaType: arquivo.type }),
-      });
-      const texto = await resp.text();
-      let dados;
-      try {
-        dados = JSON.parse(texto);
-      } catch {
+      for (let i = 0; i < arquivos.length; i++) {
+        const arquivo = arquivos[i];
+        if (arquivos.length > 1) setProgresso(`${i + 1}/${arquivos.length}`);
+        try {
+          const base64 = await lerBase64(arquivo);
+          const resp = await fetch("/api/analyze", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ imageBase64: base64, mediaType: arquivo.type }),
+          });
+          const texto = await resp.text();
+          let dados;
+          try {
+            dados = JSON.parse(texto);
+          } catch {
+            falhas.push(`${arquivo.name}: leitura indisponível`);
+            continue;
+          }
+          if (!resp.ok) {
+            falhas.push(`${arquivo.name}: ${dados.error || "falha na análise"}`);
+            continue;
+          }
+          const items = dados.items || [];
+          for (const it of items) coletados.push(it);
+          if (dados.observacao) observacoes.push(dados.observacao);
+        } catch (err) {
+          falhas.push(`${arquivo.name}: ${err instanceof Error ? err.message : "erro"}`);
+        }
+      }
+
+      if (coletados.length === 0) {
         setErroAnalise(
-          "Leitura por foto indisponível neste ambiente. Configure a ANTHROPIC_API_KEY na Vercel ou lance as medidas manualmente.",
+          falhas[0] ||
+            "Leitura por foto indisponível neste ambiente. Configure a ANTHROPIC_API_KEY na Vercel ou lance as medidas manualmente.",
         );
         return;
       }
-      if (!resp.ok) {
-        setErroAnalise(dados.error || "Falha na análise da imagem.");
-        return;
-      }
-      const items = dados.items || [];
-      if (items.length === 0) {
-        setErroAnalise("Nenhuma medida encontrada na imagem.");
-        return;
-      }
-      const novos = items.map((it, i) => ({
+
+      const novos = coletados.map((it, i) => ({
         id: novoId(),
         nome: it.nome || `Material ${i + 1}`,
         comprimento: paraMetros(it.comprimento_cm || 0, "cm"),
@@ -118,11 +137,17 @@ export default function Cubagem() {
       }));
       setMateriais(novos);
       setUnidade("cm");
-      if (dados.observacao) setObsAnalise(dados.observacao);
-    } catch (err) {
-      setErroAnalise(err instanceof Error ? err.message : "Erro ao processar a imagem.");
+
+      const partes = [];
+      if (arquivos.length > 1) {
+        partes.push(`${coletados.length} itens de ${arquivos.length - falhas.length} arquivo(s).`);
+      }
+      if (observacoes.length) partes.push(observacoes.join(" · "));
+      setObsAnalise(partes.join(" — "));
+      if (falhas.length) setErroAnalise(`Não lido(s): ${falhas.join(" | ")}`);
     } finally {
       setAnalisando(false);
+      setProgresso("");
     }
   }
 
@@ -178,12 +203,17 @@ export default function Cubagem() {
                   onClick={() => inputArquivo.current?.click()}
                   disabled={analisando}
                 >
-                  {analisando ? "Analisando…" : "📷 Adicionar arquivo"}
+                  {analisando
+                    ? progresso
+                      ? `Analisando ${progresso}…`
+                      : "Analisando…"
+                    : "📷 Adicionar arquivo(s)"}
                 </button>
                 <input
                   ref={inputArquivo}
                   type="file"
                   accept="image/*"
+                  multiple
                   style={{ display: "none" }}
                   onChange={aoEscolherArquivo}
                 />
