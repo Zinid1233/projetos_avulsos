@@ -8,7 +8,11 @@ export default function TruckView({
   metrosLineares,
   comprimentoVeiculo,
   nomeVeiculo,
+  claro = false,
 }) {
+  const c = claro
+    ? { piso: "#f5f5f5", borda: "#cccccc", grade: "#e5e5e5", texto: "#888888", pecaTraco: "#00000055" }
+    : { piso: "#101010", borda: "#2f2f2f", grade: "#242424", texto: "#7a7a7a", pecaTraco: "#00000059" };
   const comprimentoDesenho = Math.max(metrosLineares, comprimentoVeiculo || 0, 1);
 
   const padding = 44;
@@ -40,8 +44,8 @@ export default function TruckView({
           y={padding}
           width={comprimentoDesenho * escala}
           height={larguraPlanejamento * escala}
-          fill="#101010"
-          stroke="#2f2f2f"
+          fill={c.piso}
+          stroke={c.borda}
           strokeWidth={2}
           rx={6}
         />
@@ -54,14 +58,14 @@ export default function TruckView({
               y1={padding}
               x2={padding + i * escala}
               y2={padding + larguraPlanejamento * escala}
-              stroke="#242424"
+              stroke={c.grade}
               strokeWidth={1}
             />
             <text
               x={padding + i * escala}
               y={padding - 10}
               fontSize={11}
-              fill="#7a7a7a"
+              fill={c.texto}
               textAnchor="middle"
             >
               {i}m
@@ -139,7 +143,7 @@ export default function TruckView({
           x={14}
           y={padding + (larguraPlanejamento * escala) / 2}
           fontSize={11}
-          fill="#7a7a7a"
+          fill={c.texto}
           textAnchor="middle"
           transform={`rotate(-90 14 ${padding + (larguraPlanejamento * escala) / 2})`}
         >

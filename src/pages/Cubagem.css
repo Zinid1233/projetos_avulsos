@@ -289,6 +289,140 @@ table.mat td {
 .veic-edit .field span {
   color: var(--text-dim);
 }
+
+textarea.obs-area {
+  width: 100%;
+  resize: vertical;
+  min-height: 64px;
+}
+
+/* ---- Resumo / Impressão ---- */
+.resumo-wrap {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 20px;
+}
+.resumo-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-bottom: 16px;
+}
+.folha {
+  background: #ffffff;
+  color: #111;
+  border-radius: 12px;
+  padding: 28px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+}
+.folha-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-bottom: 2px solid #111;
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+}
+.folha-brand {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 700;
+  color: #111;
+  margin-right: auto;
+}
+.folha-brand span {
+  color: var(--red);
+}
+.folha-h1 {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+}
+.folha-date {
+  font-size: 13px;
+  color: #555;
+}
+.folha-obs {
+  background: #f4f4f5;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+.folha-obs strong {
+  display: block;
+  margin-bottom: 2px;
+}
+.folha-result {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 24px;
+  margin-bottom: 16px;
+}
+.folha-result > div {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px dotted #ccc;
+  padding-bottom: 4px;
+  font-size: 14px;
+}
+.folha-result span {
+  color: #555;
+}
+.folha-veic {
+  font-size: 14px;
+  background: #f4f4f5;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 16px;
+}
+.folha-vista {
+  margin-bottom: 16px;
+}
+.folha-tab {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.folha-tab th,
+.folha-tab td {
+  border: 1px solid #ddd;
+  padding: 6px 8px;
+  text-align: left;
+}
+.folha-tab th {
+  background: #111;
+  color: #fff;
+}
+.folha-tab td:nth-child(n + 2),
+.folha-tab th:nth-child(n + 2) {
+  text-align: right;
+  white-space: nowrap;
+}
+.folha-foot {
+  margin-top: 16px;
+  font-size: 12px;
+  color: #777;
+  text-align: center;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #fff;
+  }
+  .resumo-wrap {
+    padding: 0;
+    max-width: none;
+  }
+  .folha {
+    box-shadow: none;
+    border-radius: 0;
+    padding: 0;
+  }
+}
 .warn {
   color: #fca5a5;
   font-size: 14px;

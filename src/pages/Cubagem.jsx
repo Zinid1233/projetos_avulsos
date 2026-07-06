@@ -27,7 +27,7 @@ function novoMaterial(indice) {
   };
 }
 
-const FROTA_KEY = "transfast_frota_v1";
+const FROTA_KEY = "transfast_frota_v2";
 function carregarFrota() {
   try {
     const s = localStorage.getItem(FROTA_KEY);
@@ -58,6 +58,9 @@ export default function Cubagem() {
   const [erroAnalise, setErroAnalise] = useState("");
   const [obsAnalise, setObsAnalise] = useState("");
   const [avisoConferir, setAvisoConferir] = useState(false);
+  const [observacao, setObservacao] = useState("");
+  const [resumo, setResumo] = useState(false);
+  const [dataResumo, setDataResumo] = useState("");
   const inputArquivo = useRef(null);
 
   useEffect(() => {
@@ -200,6 +203,150 @@ export default function Cubagem() {
       setAnalisando(false);
       setProgresso("");
     }
+  }
+
+  function abrirResumo() {
+    setDataResumo(new Date().toLocaleString("pt-BR"));
+    setResumo(true);
+  }
+
+  // ---------- Tela de resumo (salvar / imprimir) ----------
+  if (resumo) {
+    const cabeVeiculo =
+      modo === "veiculo" && veiculo ? resultado.metrosLineares <= veiculo.comprimento + 1e-6 : null;
+    return (
+      <div className="resumo-wrap">
+        <div className="resumo-actions no-print">
+          <button className="btn" onClick={() => setResumo(false)}>
+            ✏️ Editar novamente
+          </button>
+          <button className="btn btn-primary" onClick={() => window.print()}>
+            🖨️ Salvar / Imprimir
+          </button>
+        </div>
+
+        <div className="folha">
+          <div className="folha-head">
+            <div className="folha-brand">
+              TRANS<span>FAST</span>
+            </div>
+            <div className="folha-title">
+              <div className="folha-h1">Resumo de cubagem</div>
+              <div className="folha-date">{dataResumo}</div>
+            </div>
+          </div>
+
+          {observacao && (
+            <div className="folha-obs">
+              <strong>Cotação / Observações</strong>
+              <div>{observacao}</div>
+            </div>
+          )}
+
+          <div className="folha-result">
+            {modo === "veiculo" ? (
+              <>
+                <div>
+                  <span>Metros lineares</span>
+                  <b>{resultado.metrosLineares.toFixed(2)} m</b>
+                </div>
+                <div>
+                  <span>Área de piso</span>
+                  <b>{resultado.areaTotal.toFixed(2)} m²</b>
+                </div>
+                <div>
+                  <span>Largura útil</span>
+                  <b>{larguraPlanejamento} m</b>
+                </div>
+                {empilhando && (
+                  <div>
+                    <span>Empilhado até</span>
+                    <b>{alturaMaxRemonte} m</b>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div>
+                  <span>Volume total</span>
+                  <b>{resultado.volumeTotal.toFixed(3)} m³</b>
+                </div>
+                <div>
+                  <span>Peso cubado</span>
+                  <b>
+                    {Math.round(pesoCubado)} kg <small>({fatorCubagem} kg/m³)</small>
+                  </b>
+                </div>
+              </>
+            )}
+            <div>
+              <span>Total de peças</span>
+              <b>{resultado.totalPecas}</b>
+            </div>
+            {pesoNum > 0 && (
+              <div>
+                <span>Peso informado</span>
+                <b>{pesoNum} kg</b>
+              </div>
+            )}
+          </div>
+
+          {veiculo && (
+            <div className="folha-veic">
+              <strong>Veículo:</strong> {veiculo.nome} ({veiculo.eixos}) ·{" "}
+              {veiculo.comprimento}×{veiculo.largura}
+              {carroceriaFechada(veiculo.carroceria) ? `×${veiculo.altura}` : ""} m ·{" "}
+              {nomeCarroceria(veiculo.carroceria)}
+              {cabeVeiculo != null && <> — {cabeVeiculo ? "✓ cabe" : "✗ não cabe"}</>}
+              {modo === "cubico" && capacidadeVol != null && (
+                <> — {cabeVol ? "✓ cabe" : "✗ não cabe"} ({ocupacaoVol.toFixed(0)}% de{" "}
+                  {capacidadeVol.toFixed(2)} m³)</>
+              )}
+            </div>
+          )}
+
+          {modo === "veiculo" && (
+            <div className="folha-vista">
+              <TruckView
+                pecas={resultado.pecas}
+                larguraPlanejamento={larguraPlanejamento}
+                metrosLineares={resultado.metrosLineares}
+                comprimentoVeiculo={veiculo?.comprimento}
+                nomeVeiculo={veiculo?.nome}
+                claro
+              />
+            </div>
+          )}
+
+          <table className="folha-tab">
+            <thead>
+              <tr>
+                <th>Material</th>
+                <th>Compr. ({unidade})</th>
+                <th>Larg. ({unidade})</th>
+                <th>Alt. ({unidade})</th>
+                <th>Qtd</th>
+              </tr>
+            </thead>
+            <tbody>
+              {materiais.map((m) => (
+                <tr key={m.id}>
+                  <td>{m.nome}</td>
+                  <td>{exibir(m.comprimento)}</td>
+                  <td>{exibir(m.largura)}</td>
+                  <td>{exibir(m.altura)}</td>
+                  <td>{m.quantidade}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <div className="folha-foot">
+            Transfast · Cubagem — documento gerado pelo sistema. Confira os valores.
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -601,7 +748,7 @@ export default function Cubagem() {
                         <span>
                           {v.comprimento}×{v.largura}
                           {fechado ? `×${v.altura}` : ""} m · {nomeCarroceria(v.carroceria)} ·{" "}
-                          {(v.pesoMax / 1000).toFixed(0)} t
+                          {v.eixos} · {(v.pesoMax / 1000).toFixed(0)} t
                         </span>
                         {modo === "veiculo" && status !== "nao-cabe" && (
                           <span>{ocupacaoComprimento.toFixed(0)}%</span>
@@ -663,6 +810,25 @@ export default function Cubagem() {
                 );
               })}
             </ul>
+          </div>
+
+          {/* Cotação / observações + salvar/imprimir */}
+          <div className="card">
+            <h2 className="card-title">Cotação / Observações</h2>
+            <textarea
+              className="inp obs-area"
+              rows={3}
+              placeholder="Ex.: ID da cotação, cliente, prazo, observações…"
+              value={observacao}
+              onChange={(e) => setObservacao(e.target.value)}
+            />
+            <button
+              className="btn btn-primary"
+              style={{ marginTop: 10, width: "100%" }}
+              onClick={abrirResumo}
+            >
+              🖨️ Salvar / Imprimir
+            </button>
           </div>
         </aside>
       </div>
