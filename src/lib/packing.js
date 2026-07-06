@@ -29,7 +29,7 @@ export function corPorIndice(indice) {
 }
 
 // Margem (folga) mínima entre peças, em metros.
-export const MARGEM = 0.05;
+export const MARGEM = 0.02;
 
 // Orienta a peça para caber na largura do caminhão (gira livremente no piso).
 function orientar(comp, larg, larguraCaminhao) {

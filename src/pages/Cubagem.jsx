@@ -538,8 +538,8 @@ export default function Cubagem() {
                 </button>
               </div>
               <p className="muted" style={{ marginTop: 0, marginBottom: 10 }}>
-                Arraste para reposicionar (sem sobrepor, folga de 5 cm). Duplo clique gira o
-                material. Passe o mouse para ver as medidas.
+                Arraste para reposicionar — encaixa sozinho com folga de 2 cm, sem sobrepor.
+                Duplo clique gira o material. Passe o mouse para ver as medidas.
               </p>
               <TruckView
                 pecas={pecasFinais}

@@ -92,15 +92,42 @@ export default function TruckView({
       /* ignora */
     }
   }
+  // Encaixa `valor` no alvo mais próximo dentro do limite (senão devolve o valor).
+  function encaixar(valor, alvos, limite) {
+    let melhor = valor;
+    let dist = limite;
+    for (const a of alvos) {
+      const d = Math.abs(valor - a);
+      if (a >= -1e-9 && d < dist) {
+        dist = d;
+        melhor = a;
+      }
+    }
+    return melhor;
+  }
+
   function aoArrastar(e) {
     const d = drag.current;
     if (!d) return;
     d.moveu = true;
     const { mx, my } = pontoEmMetros(e.clientX, e.clientY);
-    const x = Number(Math.max(0, mx - d.offX).toFixed(3));
-    const y = Number(
-      Math.min(Math.max(0, my - d.offY), Math.max(0, larguraPlanejamento - d.h)).toFixed(3),
+    let x = Math.max(0, mx - d.offX);
+    let y = Math.min(Math.max(0, my - d.offY), Math.max(0, larguraPlanejamento - d.h));
+
+    // Encaixe automático: alinha com as peças vizinhas deixando a margem certa.
+    const SNAP = 0.07;
+    const alvosX = [0];
+    const alvosY = [0, Math.max(0, larguraPlanejamento - d.h)];
+    for (const o of pecas) {
+      if (o.id === d.id) continue;
+      alvosX.push(o.x, o.x + o.comprimento + margem, o.x - margem - d.w, o.x + o.comprimento - d.w);
+      alvosY.push(o.y, o.y + o.largura + margem, o.y - margem - d.h, o.y + o.largura - d.h);
+    }
+    x = Number(encaixar(x, alvosX, SNAP).toFixed(3));
+    y = Number(
+      Math.min(Math.max(0, encaixar(y, alvosY, SNAP)), Math.max(0, larguraPlanejamento - d.h)).toFixed(3),
     );
+
     d.lastX = x;
     d.lastY = y;
     onMover(d.id, x, y);
