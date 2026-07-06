@@ -28,6 +28,9 @@ export function corPorIndice(indice) {
   return PALETA[indice % PALETA.length];
 }
 
+// Margem (folga) mínima entre peças, em metros.
+export const MARGEM = 0.05;
+
 // Orienta a peça para caber na largura do caminhão (gira livremente no piso).
 function orientar(comp, larg, larguraCaminhao) {
   const maior = Math.max(comp, larg);
@@ -90,7 +93,7 @@ export function calcularCubagem(
 
   const prateleiras = [];
   const pecas = [];
-  let comprimentoTotal = 0;
+  let fimComprimento = 0; // onde a próxima prateleira começa (inclui a margem)
   let areaTotal = 0;
   let pecaMaiorLargura = 0;
   let algumaForaDeMedida = false;
@@ -100,14 +103,15 @@ export function calcularCubagem(
     pecaMaiorLargura = Math.max(pecaMaiorLargura, Math.min(p.along, p.across));
     if (p.foraDeMedida) algumaForaDeMedida = true;
 
+    // procura prateleira com folga suficiente (deixando MARGEM entre peças)
     let prateleira = prateleiras.find(
       (s) => larguraPlanejamento - s.usado >= p.across - 1e-9 && s.altura >= p.along - 1e-9,
     );
 
     if (!prateleira) {
-      prateleira = { x0: comprimentoTotal, altura: p.along, usado: 0 };
+      prateleira = { x0: fimComprimento, altura: p.along, usado: 0 };
       prateleiras.push(prateleira);
-      comprimentoTotal += p.along;
+      fimComprimento += p.along + MARGEM;
     }
 
     pecas.push({
@@ -122,8 +126,11 @@ export function calcularCubagem(
       pilha: p.pilha,
     });
 
-    prateleira.usado += p.across;
+    prateleira.usado += p.across + MARGEM;
   }
+
+  // comprimento efetivo = maior extensão de peça (sem contar a margem final)
+  const comprimentoTotal = prateleiras.reduce((mx, s) => Math.max(mx, s.x0 + s.altura), 0);
 
   return {
     metrosLineares: Number(comprimentoTotal.toFixed(3)),

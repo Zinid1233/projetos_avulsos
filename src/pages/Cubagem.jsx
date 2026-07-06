@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { calcularCubagem, corPorIndice, paraMetros } from "../lib/packing.js";
+import { calcularCubagem, corPorIndice, paraMetros, MARGEM } from "../lib/packing.js";
 import {
   avaliarVeiculos,
   VEICULOS,
@@ -62,6 +62,7 @@ export default function Cubagem() {
   const [resumo, setResumo] = useState(false);
   const [dataResumo, setDataResumo] = useState("");
   const [posicoes, setPosicoes] = useState({});
+  const [rotacoes, setRotacoes] = useState({});
   const inputArquivo = useRef(null);
 
   useEffect(() => {
@@ -88,17 +89,27 @@ export default function Cubagem() {
     [materiais, larguraPlanejamento, empilhando, alturaMaxRemonte],
   );
 
-  // Peças com posições manuais aplicadas (arrastar) e metros lineares efetivos.
+  // Peças com rotação e posição manual aplicadas; metros lineares efetivos.
   const pecasFinais = useMemo(
-    () => resultado.pecas.map((p) => (posicoes[p.id] ? { ...p, ...posicoes[p.id] } : p)),
-    [resultado.pecas, posicoes],
+    () =>
+      resultado.pecas.map((p) => {
+        let q = p;
+        if (rotacoes[p.id]) q = { ...q, comprimento: p.largura, largura: p.comprimento };
+        if (posicoes[p.id]) q = { ...q, x: posicoes[p.id].x, y: posicoes[p.id].y };
+        return q;
+      }),
+    [resultado.pecas, posicoes, rotacoes],
   );
   const metrosLineares = useMemo(
     () => Number(pecasFinais.reduce((mx, p) => Math.max(mx, p.x + p.comprimento), 0).toFixed(3)),
     [pecasFinais],
   );
   const mover = (id, x, y) => setPosicoes((p) => ({ ...p, [id]: { x, y } }));
-  const refazer = () => setPosicoes({});
+  const girar = (id) => setRotacoes((r) => ({ ...r, [id]: !r[id] }));
+  const refazer = () => {
+    setPosicoes({});
+    setRotacoes({});
+  };
 
   const pesoNum = Number(pesoTotal) || 0;
   const avaliacoes = useMemo(
@@ -527,7 +538,8 @@ export default function Cubagem() {
                 </button>
               </div>
               <p className="muted" style={{ marginTop: 0, marginBottom: 10 }}>
-                Arraste os materiais para reposicionar. Passe o mouse para ver as medidas.
+                Arraste para reposicionar (sem sobrepor, folga de 5 cm). Duplo clique gira o
+                material. Passe o mouse para ver as medidas.
               </p>
               <TruckView
                 pecas={pecasFinais}
@@ -539,6 +551,8 @@ export default function Cubagem() {
                 unidade={unidade}
                 editavel
                 onMover={mover}
+                onGirar={girar}
+                margem={MARGEM}
               />
               {empilhando && (
                 <p className="muted" style={{ marginTop: 8 }}>

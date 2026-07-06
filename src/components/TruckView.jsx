@@ -14,6 +14,8 @@ export default function TruckView({
   claro = false,
   editavel = false,
   onMover,
+  onGirar,
+  margem = 0.05,
   fator = 100,
   unidade = "cm",
 }) {
@@ -57,11 +59,33 @@ export default function TruckView({
     return { mx: (loc.x - padding) / escala, my: (loc.y - padding) / escala };
   }
 
+  // Duas peças ficam a menos de `margem` uma da outra (sobreposição/folga)?
+  function conflita(x, y, w, h, id) {
+    return pecas.some((o) => {
+      if (o.id === id) return false;
+      return (
+        x < o.x + o.comprimento + margem - 1e-6 &&
+        x + w + margem - 1e-6 > o.x &&
+        y < o.y + o.largura + margem - 1e-6 &&
+        y + h + margem - 1e-6 > o.y
+      );
+    });
+  }
+
   function aoPegar(e, p) {
     if (!editavel || !onMover) return;
     e.preventDefault();
     const { mx, my } = pontoEmMetros(e.clientX, e.clientY);
-    drag.current = { id: p.id, offX: mx - p.x, offY: my - p.y, w: p.comprimento, h: p.largura };
+    drag.current = {
+      id: p.id,
+      offX: mx - p.x,
+      offY: my - p.y,
+      w: p.comprimento,
+      h: p.largura,
+      startX: p.x,
+      startY: p.y,
+      moveu: false,
+    };
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
     } catch {
@@ -71,15 +95,24 @@ export default function TruckView({
   function aoArrastar(e) {
     const d = drag.current;
     if (!d) return;
+    d.moveu = true;
     const { mx, my } = pontoEmMetros(e.clientX, e.clientY);
-    const x = Math.max(0, mx - d.offX);
-    const y = Math.min(Math.max(0, my - d.offY), Math.max(0, larguraPlanejamento - d.h));
-    onMover(d.id, Number(x.toFixed(3)), Number(y.toFixed(3)));
+    const x = Number(Math.max(0, mx - d.offX).toFixed(3));
+    const y = Number(
+      Math.min(Math.max(0, my - d.offY), Math.max(0, larguraPlanejamento - d.h)).toFixed(3),
+    );
+    d.lastX = x;
+    d.lastY = y;
+    onMover(d.id, x, y);
   }
   function aoSoltar(e) {
-    if (drag.current) {
-      drag.current = null;
-      e.currentTarget.releasePointerCapture?.(e.pointerId);
+    const d = drag.current;
+    if (!d) return;
+    drag.current = null;
+    e.currentTarget.releasePointerCapture?.(e.pointerId);
+    // se soltou sobrepondo outra peça (ou sem folga), volta para o início
+    if (d.moveu && conflita(d.lastX, d.lastY, d.w, d.h, d.id)) {
+      onMover(d.id, d.startX, d.startY);
     }
   }
 
@@ -146,6 +179,7 @@ export default function TruckView({
               onPointerDown={(e) => aoPegar(e, p)}
               onPointerMove={aoArrastar}
               onPointerUp={aoSoltar}
+              onDoubleClick={() => editavel && onGirar && onGirar(p.id)}
               style={{ cursor: editavel ? "grab" : "default" }}
             >
               <title>
