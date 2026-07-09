@@ -63,6 +63,8 @@ export default function Cubagem() {
   const [dataResumo, setDataResumo] = useState("");
   const [posicoes, setPosicoes] = useState({});
   const [rotacoes, setRotacoes] = useState({});
+  const [mostrarTexto, setMostrarTexto] = useState(false);
+  const [textoMedidas, setTextoMedidas] = useState("");
   const inputArquivo = useRef(null);
 
   useEffect(() => {
@@ -195,37 +197,70 @@ export default function Cubagem() {
         }
       }
 
-      if (coletados.length === 0) {
-        setErroAnalise(
-          falhas[0] || "Não consegui identificar medidas na(s) imagem(ns). Lance manualmente.",
-        );
-        return;
-      }
-
-      // SOMA à lista atual (mantém manuais e de outras fotos)
-      setMateriais((atual) => {
-        const base = atual.length;
-        const novos = coletados.map((it, i) => ({
-          id: novoId(),
-          nome: it.nome || `Material ${base + i + 1}`,
-          comprimento: paraMetros(it.comprimento_cm || 0, "cm"),
-          largura: paraMetros(it.largura_cm || 0, "cm"),
-          altura: it.altura_cm ? paraMetros(it.altura_cm, "cm") : 0.5,
-          quantidade: Math.max(1, Math.floor(it.quantidade || 1)),
-          cor: corPorIndice(base + i),
-        }));
-        return [...atual, ...novos];
-      });
-      setUnidade("cm");
-      setAvisoConferir(true);
-
-      const partes = [`${coletados.length} item(ns) adicionado(s).`];
-      if (observacoes.length) partes.push(observacoes.join(" · "));
-      setObsAnalise(partes.join(" "));
-      if (falhas.length) setErroAnalise(`Não lido(s): ${falhas.join(" | ")}`);
+      aplicarResultado(coletados, observacoes, falhas, "na(s) imagem(ns)");
     } finally {
       setAnalisando(false);
       setProgresso("");
+    }
+  }
+
+  // Aplica os itens identificados (imagem ou texto): SOMA à lista atual.
+  function aplicarResultado(coletados, observacoes, falhas, ondeVazio) {
+    if (coletados.length === 0) {
+      setErroAnalise(falhas[0] || `Não consegui identificar medidas ${ondeVazio}. Lance manualmente.`);
+      return;
+    }
+    setMateriais((atual) => {
+      const base = atual.length;
+      const novos = coletados.map((it, i) => ({
+        id: novoId(),
+        nome: it.nome || `Material ${base + i + 1}`,
+        comprimento: paraMetros(it.comprimento_cm || 0, "cm"),
+        largura: paraMetros(it.largura_cm || 0, "cm"),
+        altura: it.altura_cm ? paraMetros(it.altura_cm, "cm") : 0.5,
+        quantidade: Math.max(1, Math.floor(it.quantidade || 1)),
+        cor: corPorIndice(base + i),
+      }));
+      return [...atual, ...novos];
+    });
+    setUnidade("cm");
+    setAvisoConferir(true);
+    const partes = [`${coletados.length} item(ns) adicionado(s).`];
+    if (observacoes.length) partes.push(observacoes.join(" · "));
+    setObsAnalise(partes.join(" "));
+    setErroAnalise(falhas.length ? `Não lido(s): ${falhas.join(" | ")}` : "");
+  }
+
+  // Lê um texto colado (mensagem/e-mail) e identifica as medidas.
+  async function aoIdentificarTexto() {
+    const t = textoMedidas.trim();
+    if (!t) return;
+    setErroAnalise("");
+    setObsAnalise("");
+    setAnalisando(true);
+    try {
+      const resp = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ texto: t }),
+      });
+      const bruto = await resp.text();
+      let dados;
+      try {
+        dados = JSON.parse(bruto);
+      } catch {
+        setErroAnalise("Leitura indisponível (verifique a GEMINI_API_KEY na Vercel).");
+        return;
+      }
+      if (!resp.ok) {
+        setErroAnalise(dados.error || "Falha ao identificar as medidas.");
+        return;
+      }
+      aplicarResultado(dados.items || [], dados.observacao ? [dados.observacao] : [], [], "no texto");
+    } catch (err) {
+      setErroAnalise(err instanceof Error ? err.message : "Erro ao processar o texto.");
+    } finally {
+      setAnalisando(false);
     }
   }
 
@@ -428,6 +463,13 @@ export default function Cubagem() {
                       : "Analisando…"
                     : "📷 Adicionar arquivo(s)"}
                 </button>
+                <button
+                  className="btn"
+                  onClick={() => setMostrarTexto((v) => !v)}
+                  disabled={analisando}
+                >
+                  📝 Colar texto
+                </button>
                 <input
                   ref={inputArquivo}
                   type="file"
@@ -439,9 +481,29 @@ export default function Cubagem() {
               </div>
             </div>
 
+            {mostrarTexto && (
+              <div className="texto-box">
+                <textarea
+                  className="inp obs-area"
+                  rows={3}
+                  placeholder="Cole aqui o texto com as medidas (ex.: '3 caixas de 1,20 x 0,80 x 0,50 m, palete 100x120, motor 45x45x60 - 2un')…"
+                  value={textoMedidas}
+                  onChange={(e) => setTextoMedidas(e.target.value)}
+                />
+                <div className="texto-box-acoes">
+                  <button className="btn" onClick={() => setTextoMedidas("")} disabled={analisando}>
+                    Limpar
+                  </button>
+                  <button className="btn btn-primary" onClick={aoIdentificarTexto} disabled={analisando}>
+                    {analisando ? "Identificando…" : "🔎 Identificar medidas"}
+                  </button>
+                </div>
+              </div>
+            )}
+
             {avisoConferir && (
               <p className="alert alert-warn">
-                ⚠ Confira os valores lidos da imagem — a IA acerta muito, mas pode errar
+                ⚠ Confira os valores identificados — a IA acerta muito, mas pode errar
                 quantidades ou medidas.
                 <button className="alert-x" onClick={() => setAvisoConferir(false)} title="Ok">
                   ✕

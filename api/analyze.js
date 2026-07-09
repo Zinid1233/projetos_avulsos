@@ -52,6 +52,27 @@ Regras:
 - NÃO invente linhas: retorne apenas o que está na imagem. Não inclua a linha de total.
 - Em "observacao", escreva 1 frase curta (unidade assumida, dúvidas de leitura).`;
 
+const PROMPT_TEXTO = `Você extrai medidas de materiais para transporte (transportadora Transfast)
+a partir de um TEXTO livre (ex.: mensagem de WhatsApp, e-mail, lista colada pelo cliente).
+
+Identifique CADA material com suas medidas. O texto pode ter formatos variados, por
+exemplo: "3 caixas de 1,20 x 0,80 x 0,50 m", "palete 100x120", "Motor 45x45x60 - 2un",
+"Compr 250 Larg 120 Alt 80".
+
+Regras:
+- Converta TODAS as medidas para CENTÍMETROS (cm): m→×100, mm→÷10, in→×2,54. Se não
+  houver unidade, assuma cm.
+- Vírgula é separador decimal (1,20 = 1,20 m).
+- comprimento_cm, largura_cm, altura_cm: se houver rótulos (Compr/Larg/Alt) use-os;
+  senão, o maior lado é o comprimento e o menor a largura; altura 0 se não houver.
+- quantidade: use o número indicado ("3 caixas", "x4", "2un"); se não houver, 1.
+- nome: a descrição do item; se não houver, "Material N".
+- NÃO invente itens: só o que está no texto. Ignore partes que não são medidas.
+- Em "observacao", escreva 1 frase curta (unidade assumida, dúvidas).
+
+TEXTO:
+`;
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Método não permitido" });
@@ -62,27 +83,29 @@ export default async function handler(req, res) {
   if (!apiKey) {
     res.status(503).json({
       error:
-        "Leitura por imagem indisponível: configure a variável GEMINI_API_KEY (gratuita) na Vercel. Você pode lançar as medidas manualmente.",
+        "Leitura automática indisponível: configure a variável GEMINI_API_KEY (gratuita) na Vercel. Você pode lançar as medidas manualmente.",
     });
     return;
   }
 
   const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
-  const { imageBase64, mediaType } = body;
-  if (!imageBase64) {
-    res.status(400).json({ error: "Imagem não enviada." });
+  const { imageBase64, mediaType, texto } = body;
+
+  let parts;
+  if (typeof texto === "string" && texto.trim()) {
+    parts = [{ text: PROMPT_TEXTO + texto.slice(0, 12000) }];
+  } else if (imageBase64) {
+    parts = [
+      { inline_data: { mime_type: mediaType || "image/jpeg", data: imageBase64 } },
+      { text: PROMPT },
+    ];
+  } else {
+    res.status(400).json({ error: "Envie uma imagem ou um texto com as medidas." });
     return;
   }
 
   const corpo = JSON.stringify({
-    contents: [
-      {
-        parts: [
-          { inline_data: { mime_type: mediaType || "image/jpeg", data: imageBase64 } },
-          { text: PROMPT },
-        ],
-      },
-    ],
+    contents: [{ parts }],
     generationConfig: {
       temperature: 0,
       responseMimeType: "application/json",
