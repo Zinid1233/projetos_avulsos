@@ -71,7 +71,6 @@ export default function Cubagem() {
   const [rotacoes, setRotacoes] = useState({});
   const [mostrarTexto, setMostrarTexto] = useState(false);
   const [textoMedidas, setTextoMedidas] = useState("");
-  const [alturaCarga, setAlturaCarga] = useState(0);
   const inputArquivo = useRef(null);
 
   useEffect(() => {
@@ -84,7 +83,24 @@ export default function Cubagem() {
 
   const fator = unidade === "mm" ? 1000 : unidade === "cm" ? 100 : 1;
   const empilhando = modo === "veiculo" && remontar;
-  const mostrarAltura = modo === "cubico" || empilhando;
+  // Altura sempre visível: usada no cúbico (volume) e no veículo (limite/AET).
+  const mostrarAltura = true;
+
+  // Altura que a carga alcança (para o AET): maior material; se empilhar, a maior pilha.
+  const alturaCargaCalc = useMemo(() => {
+    let h = 0;
+    for (const m of materiais) {
+      const q = Math.floor(m.quantidade || 0);
+      if (q <= 0 || !m.altura || m.altura <= 0) continue;
+      if (empilhando && alturaMaxRemonte > 0) {
+        const porPilha = Math.max(1, Math.floor(alturaMaxRemonte / m.altura));
+        h = Math.max(h, porPilha * m.altura);
+      } else {
+        h = Math.max(h, m.altura);
+      }
+    }
+    return h;
+  }, [materiais, empilhando, alturaMaxRemonte]);
 
   const veiculo = frota.find((v) => v.id === veiculoSelecionado);
   const larguraPlanejamento = veiculo ? veiculo.largura : larguraManual;
@@ -137,7 +153,7 @@ export default function Cubagem() {
   const cabeVol = capacidadeVol != null ? resultado.volumeTotal <= capacidadeVol + 1e-9 : null;
 
   // Verificação de limites legais / licença (AET) — altura do chão ao topo.
-  const alturaTotal = (veiculo ? veiculo.alturaPiso : 0) + (Number(alturaCarga) || 0);
+  const alturaTotal = (veiculo ? veiculo.alturaPiso : 0) + alturaCargaCalc;
   const licenca = checarLimites(
     alturaTotal,
     resultado.pecaMaiorLargura,
@@ -377,7 +393,7 @@ export default function Cubagem() {
                 <> — {cabeVol ? "✓ cabe" : "✗ não cabe"} ({ocupacaoVol.toFixed(0)}% de{" "}
                   {capacidadeVol.toFixed(2)} m³)</>
               )}
-              {modo === "veiculo" && alturaCarga > 0 && (
+              {modo === "veiculo" && alturaCargaCalc > 0 && (
                 <div style={{ marginTop: 6 }}>
                   <strong>Altura total:</strong> {alturaTotal.toFixed(2)} m (limite{" "}
                   {LIMITE_ALTURA.toFixed(2)} m) —{" "}
@@ -832,18 +848,18 @@ export default function Cubagem() {
           {modo === "veiculo" && (
             <div className="card">
               <h2 className="card-title">Altura e licença (AET)</h2>
-              <label className="field">
-                <span>Altura da carga (m)</span>
-                <NumInput
-                  className="inp inp-mini"
-                  min={0}
-                  value={alturaCarga}
-                  onChange={(n) => setAlturaCarga(n || 0)}
-                />
-              </label>
-              {veiculo ? (
+              {alturaCargaCalc <= 0 ? (
+                <p className="muted">
+                  Informe a <strong>altura</strong> dos materiais (coluna Alt.) para calcular a
+                  altura da carga.
+                </p>
+              ) : veiculo ? (
                 <>
-                  <dl className="dl" style={{ marginTop: 10 }}>
+                  <dl className="dl">
+                    <div className="dl-row">
+                      <dt>Altura da carga {empilhando ? "(empilhada)" : "(maior material)"}</dt>
+                      <dd>{(alturaCargaCalc * fator).toFixed(0)} {unidade} · {alturaCargaCalc.toFixed(2)} m</dd>
+                    </div>
                     <div className="dl-row">
                       <dt>Assoalho do {veiculo.nome}</dt>
                       <dd>{veiculo.alturaPiso} m</dd>
@@ -873,8 +889,9 @@ export default function Cubagem() {
                   )}
                 </>
               ) : (
-                <p className="muted" style={{ marginTop: 10 }}>
-                  Selecione um veículo abaixo para calcular a altura total e verificar a licença.
+                <p className="muted">
+                  Altura da carga: <strong>{alturaCargaCalc.toFixed(2)} m</strong>. Selecione um
+                  veículo abaixo para somar o assoalho e verificar a licença.
                 </p>
               )}
             </div>
