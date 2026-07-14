@@ -6,6 +6,8 @@ import {
   CARROCERIAS,
   carroceriaFechada,
   nomeCarroceria,
+  checarLimites,
+  LIMITE_ALTURA,
 } from "../lib/vehicles.js";
 import TruckView from "../components/TruckView.jsx";
 import NumInput from "../components/NumInput.jsx";
@@ -33,8 +35,12 @@ function carregarFrota() {
     const s = localStorage.getItem(FROTA_KEY);
     const arr = s ? JSON.parse(s) : null;
     if (Array.isArray(arr) && arr.length) {
-      // completa campos que possam faltar em versões antigas
-      return arr.map((v) => ({ carroceria: "sider", altura: 2.7, ...v }));
+      // completa campos que possam faltar em versões antigas, usando os padrões
+      // de cada veículo (por id) como base e preservando as edições salvas.
+      return arr.map((v) => {
+        const padrao = VEICULOS.find((x) => x.id === v.id);
+        return { carroceria: "sider", altura: 2.7, alturaPiso: 1.2, ...padrao, ...v };
+      });
     }
   } catch {
     /* ignora */
@@ -65,6 +71,7 @@ export default function Cubagem() {
   const [rotacoes, setRotacoes] = useState({});
   const [mostrarTexto, setMostrarTexto] = useState(false);
   const [textoMedidas, setTextoMedidas] = useState("");
+  const [alturaCarga, setAlturaCarga] = useState(0);
   const inputArquivo = useRef(null);
 
   useEffect(() => {
@@ -128,6 +135,15 @@ export default function Cubagem() {
       : null;
   const ocupacaoVol = capacidadeVol ? (resultado.volumeTotal / capacidadeVol) * 100 : null;
   const cabeVol = capacidadeVol != null ? resultado.volumeTotal <= capacidadeVol + 1e-9 : null;
+
+  // Verificação de limites legais / licença (AET) — altura do chão ao topo.
+  const alturaTotal = (veiculo ? veiculo.alturaPiso : 0) + (Number(alturaCarga) || 0);
+  const licenca = checarLimites(
+    alturaTotal,
+    resultado.pecaMaiorLargura,
+    metrosLineares,
+    veiculo?.comprimento,
+  );
 
   // ----- materiais -----
   function atualizar(id, campo, valor) {
@@ -360,6 +376,13 @@ export default function Cubagem() {
               {modo === "cubico" && capacidadeVol != null && (
                 <> — {cabeVol ? "✓ cabe" : "✗ não cabe"} ({ocupacaoVol.toFixed(0)}% de{" "}
                   {capacidadeVol.toFixed(2)} m³)</>
+              )}
+              {modo === "veiculo" && alturaCarga > 0 && (
+                <div style={{ marginTop: 6 }}>
+                  <strong>Altura total:</strong> {alturaTotal.toFixed(2)} m (limite{" "}
+                  {LIMITE_ALTURA.toFixed(2)} m) —{" "}
+                  {licenca.precisa ? "⚠ PRECISA DE LICENÇA (AET)" : "✓ dentro do limite"}
+                </div>
               )}
             </div>
           )}
@@ -805,6 +828,58 @@ export default function Cubagem() {
             )}
           </div>
 
+          {/* Limite de altura / Licença (AET) — modo veículo */}
+          {modo === "veiculo" && (
+            <div className="card">
+              <h2 className="card-title">Altura e licença (AET)</h2>
+              <label className="field">
+                <span>Altura da carga (m)</span>
+                <NumInput
+                  className="inp inp-mini"
+                  min={0}
+                  value={alturaCarga}
+                  onChange={(n) => setAlturaCarga(n || 0)}
+                />
+              </label>
+              {veiculo ? (
+                <>
+                  <dl className="dl" style={{ marginTop: 10 }}>
+                    <div className="dl-row">
+                      <dt>Assoalho do {veiculo.nome}</dt>
+                      <dd>{veiculo.alturaPiso} m</dd>
+                    </div>
+                    <div className="dl-row">
+                      <dt>Altura total (chão→topo)</dt>
+                      <dd>
+                        <strong>{alturaTotal.toFixed(2)} m</strong>
+                      </dd>
+                    </div>
+                    <div className="dl-row">
+                      <dt>Limite legal</dt>
+                      <dd>{LIMITE_ALTURA.toFixed(2)} m</dd>
+                    </div>
+                  </dl>
+                  {licenca.precisa ? (
+                    <div className="licenca-alerta">
+                      ⚠ Veículo precisa de licença (AET)
+                      <ul>
+                        {licenca.motivos.map((m, i) => (
+                          <li key={i}>{m}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : (
+                    <div className="licenca-ok">✓ Dentro dos limites — não precisa de licença</div>
+                  )}
+                </>
+              ) : (
+                <p className="muted" style={{ marginTop: 10 }}>
+                  Selecione um veículo abaixo para calcular a altura total e verificar a licença.
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Veículos (nos dois modos) */}
           <div className="card">
             <div className="toolbar" style={{ marginBottom: 8 }}>
@@ -909,6 +984,15 @@ export default function Cubagem() {
                             />
                           </label>
                         )}
+                        <label className="field">
+                          <span>Altura do assoalho (m)</span>
+                          <NumInput
+                            className="inp inp-mini"
+                            min={0}
+                            value={v.alturaPiso}
+                            onChange={(n) => atualizarVeiculo(v.id, "alturaPiso", n)}
+                          />
+                        </label>
                       </div>
                     )}
                   </li>
