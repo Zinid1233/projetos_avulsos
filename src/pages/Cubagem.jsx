@@ -56,6 +56,7 @@ export default function Cubagem() {
   const [veiculoSelecionado, setVeiculoSelecionado] = useState("");
   const [larguraManual, setLarguraManual] = useState(2.4);
   const [pesoTotal, setPesoTotal] = useState("");
+  const [considerarAltura, setConsiderarAltura] = useState(false);
   const [remontar, setRemontar] = useState(false);
   const [alturaMaxRemonte, setAlturaMaxRemonte] = useState(2.7);
   const [fatorCubagem, setFatorCubagem] = useState(300);
@@ -82,9 +83,9 @@ export default function Cubagem() {
   }, [frota]);
 
   const fator = unidade === "mm" ? 1000 : unidade === "cm" ? 100 : 1;
-  const empilhando = modo === "veiculo" && remontar;
-  // Altura sempre visível: usada no cúbico (volume) e no veículo (limite/AET).
-  const mostrarAltura = true;
+  const empilhando = modo === "veiculo" && considerarAltura && remontar;
+  // Altura no cúbico (volume) sempre; no veículo, só quando "Considerar altura".
+  const mostrarAltura = modo === "cubico" || (modo === "veiculo" && considerarAltura);
 
   // Altura que a carga alcança (para o AET): maior material; se empilhar, a maior pilha.
   const alturaCargaCalc = useMemo(() => {
@@ -393,7 +394,7 @@ export default function Cubagem() {
                 <> — {cabeVol ? "✓ cabe" : "✗ não cabe"} ({ocupacaoVol.toFixed(0)}% de{" "}
                   {capacidadeVol.toFixed(2)} m³)</>
               )}
-              {modo === "veiculo" && alturaCargaCalc > 0 && (
+              {modo === "veiculo" && considerarAltura && alturaCargaCalc > 0 && (
                 <div style={{ marginTop: 6 }}>
                   <strong>Altura total:</strong> {alturaTotal.toFixed(2)} m (limite{" "}
                   {LIMITE_ALTURA.toFixed(2)} m) —{" "}
@@ -750,26 +751,44 @@ export default function Cubagem() {
                     <label className="check">
                       <input
                         type="checkbox"
-                        checked={remontar}
-                        onChange={(e) => setRemontar(e.target.checked)}
+                        checked={considerarAltura}
+                        onChange={(e) => setConsiderarAltura(e.target.checked)}
                       />
-                      Material pode ser remontado (empilhado)?
+                      Considerar altura (limite / AET)?
                     </label>
-                    {remontar && (
-                      <div style={{ marginTop: 8, display: "grid", gap: 4 }}>
-                        <label className="field">
-                          <span>Empilhar até (m)</span>
-                          <NumInput
-                            className="inp inp-mini"
-                            min={0}
-                            value={alturaMaxRemonte}
-                            onChange={(n) => setAlturaMaxRemonte(n || 0)}
+                    {considerarAltura && (
+                      <div style={{ marginTop: 8, display: "grid", gap: 8 }}>
+                        <span className="muted" style={{ fontSize: 12 }}>
+                          Informe a altura de cada material (coluna Alt.) para verificar o AET.
+                        </span>
+                        <label className="check">
+                          <input
+                            type="checkbox"
+                            checked={remontar}
+                            onChange={(e) => setRemontar(e.target.checked)}
                           />
+                          Material pode ser remontado (empilhado)?
                         </label>
-                        {veiculo && carroceriaFechada(veiculo.carroceria) && (
-                          <button className="link" onClick={() => setAlturaMaxRemonte(veiculo.altura)}>
-                            ↧ usar altura interna do {veiculo.nome} ({veiculo.altura} m)
-                          </button>
+                        {remontar && (
+                          <div style={{ display: "grid", gap: 4 }}>
+                            <label className="field">
+                              <span>Empilhar até (m)</span>
+                              <NumInput
+                                className="inp inp-mini"
+                                min={0}
+                                value={alturaMaxRemonte}
+                                onChange={(n) => setAlturaMaxRemonte(n || 0)}
+                              />
+                            </label>
+                            {veiculo && carroceriaFechada(veiculo.carroceria) && (
+                              <button
+                                className="link"
+                                onClick={() => setAlturaMaxRemonte(veiculo.altura)}
+                              >
+                                ↧ usar altura interna do {veiculo.nome} ({veiculo.altura} m)
+                              </button>
+                            )}
+                          </div>
                         )}
                       </div>
                     )}
@@ -844,8 +863,8 @@ export default function Cubagem() {
             )}
           </div>
 
-          {/* Limite de altura / Licença (AET) — modo veículo */}
-          {modo === "veiculo" && (
+          {/* Limite de altura / Licença (AET) — modo veículo, quando considerar altura */}
+          {modo === "veiculo" && considerarAltura && (
             <div className="card">
               <h2 className="card-title">Altura e licença (AET)</h2>
               {alturaCargaCalc <= 0 ? (
