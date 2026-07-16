@@ -46,9 +46,9 @@ function novoMaterial(indice) {
   return {
     id: novoId(),
     nome: `Material ${indice + 1}`,
-    comprimento: 1,
-    largura: 0.5,
-    altura: 0.5,
+    comprimento: 0,
+    largura: 0,
+    altura: 0,
     quantidade: 1,
     cor: corPorIndice(indice),
   };
@@ -224,7 +224,11 @@ export default function Cubagem() {
   const compat = veiculosUI.filter((x) => x.v.id !== recomendadoId && x.cabe);
   const incompat = veiculosUI.filter((x) => !x.cabe);
 
-  const totalUnidades = materiais.reduce((s, m) => s + Math.max(0, Math.floor(m.quantidade || 0)), 0);
+  const materiaisPreenchidos = materiais.filter((m) => m.comprimento > 0 && m.largura > 0);
+  const totalUnidades = materiaisPreenchidos.reduce(
+    (s, m) => s + Math.max(0, Math.floor(m.quantidade || 0)),
+    0,
+  );
   const cabeVeiculoLinear = veiculo ? metrosLineares <= veiculo.comprimento + 1e-6 : null;
   const ocupacaoLinear = veiculo && veiculo.comprimento ? (metrosLineares / veiculo.comprimento) * 100 : null;
 
@@ -575,7 +579,7 @@ export default function Cubagem() {
           </div>
           <div className="hero-stats">
             <div className="stat">
-              <div className="stat-num">{materiais.length}</div>
+              <div className="stat-num">{materiaisPreenchidos.length}</div>
               <div className="stat-label">Materiais</div>
             </div>
             <div className="stat">
@@ -634,9 +638,6 @@ export default function Cubagem() {
                     disabled={analisando}
                   >
                     <ClipboardPaste size={15} /> Colar texto
-                  </button>
-                  <button className="btn btn-primary" onClick={adicionar}>
-                    <Plus size={15} /> Adicionar material
                   </button>
                   <input
                     ref={inputArquivo}
@@ -895,25 +896,31 @@ export default function Cubagem() {
                 <h2 className="card-title">
                   <Box size={17} /> Volume por material
                 </h2>
-                <ul className="vol-list" style={{ marginTop: 14 }}>
-                  {materiais.map((m) => {
-                    const vol =
-                      m.comprimento * m.largura * m.altura * Math.max(0, Math.floor(m.quantidade || 0));
-                    return (
-                      <li key={m.id} className="vol-item">
-                        <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                          <span className="dot" style={{ backgroundColor: m.cor }} />
-                          {m.nome}
-                          <span className="dim">
-                            {exibir(m.comprimento)}×{exibir(m.largura)}×{exibir(m.altura)} {unidade} ·{" "}
-                            {m.quantidade}un
+                {materiaisPreenchidos.length === 0 ? (
+                  <p className="empty" style={{ marginTop: 12 }}>
+                    Informe as medidas dos materiais para ver o volume.
+                  </p>
+                ) : (
+                  <ul className="vol-list" style={{ marginTop: 14 }}>
+                    {materiaisPreenchidos.map((m) => {
+                      const vol =
+                        m.comprimento * m.largura * m.altura * Math.max(0, Math.floor(m.quantidade || 0));
+                      return (
+                        <li key={m.id} className="vol-item">
+                          <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <span className="dot" style={{ backgroundColor: m.cor }} />
+                            {m.nome}
+                            <span className="dim">
+                              {exibir(m.comprimento)}×{exibir(m.largura)}×{exibir(m.altura)} {unidade} ·{" "}
+                              {m.quantidade}un
+                            </span>
                           </span>
-                        </span>
-                        <strong>{fmt(vol, 3)} m³</strong>
-                      </li>
-                    );
-                  })}
-                </ul>
+                          <strong>{fmt(vol, 3)} m³</strong>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
               </div>
             )}
           </section>

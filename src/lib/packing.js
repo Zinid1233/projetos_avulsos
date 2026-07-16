@@ -60,10 +60,11 @@ export function calcularCubagem(
 
   for (const m of materiais) {
     const qtd = Math.max(0, Math.floor(m.quantidade || 0));
+    // ignora materiais ainda sem medidas: não entram em nenhuma soma
+    if (qtd === 0 || !(m.comprimento > 0) || !(m.largura > 0)) continue;
     const altura = Math.max(0, m.altura || 0);
     volumeTotal += m.comprimento * m.largura * altura * qtd;
     totalPecas += qtd;
-    if (qtd === 0) continue;
 
     let porPilha = 1;
     if (opcoes.remontar && altura > 0 && opcoes.alturaMaxRemonte > 0) {
