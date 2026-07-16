@@ -1,4 +1,28 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Plus,
+  Upload,
+  ClipboardPaste,
+  Ruler,
+  RotateCcw,
+  Trash2,
+  AlertTriangle,
+  Sparkles,
+  Truck,
+  Package,
+  Printer,
+  Pencil,
+  Search,
+  Check,
+  X,
+  Grid3x3,
+  Tag,
+  ArrowUp,
+  ShieldAlert,
+  ShieldCheck,
+  Box,
+  Settings2,
+} from "lucide-react";
 import { calcularCubagem, corPorIndice, paraMetros, MARGEM } from "../lib/packing.js";
 import {
   avaliarVeiculos,
@@ -11,11 +35,12 @@ import {
 } from "../lib/vehicles.js";
 import TruckView from "../components/TruckView.jsx";
 import NumInput from "../components/NumInput.jsx";
-import logo from "../assets/logo.svg";
+import TransfastLogo from "../components/TransfastLogo.jsx";
 import "./Cubagem.css";
 
 let contador = 0;
 const novoId = () => `m${++contador}-${Math.floor(performance.now())}`;
+const fmt = (n, d = 2) => Number(n || 0).toFixed(d).replace(".", ",");
 
 function novoMaterial(indice) {
   return {
@@ -35,8 +60,6 @@ function carregarFrota() {
     const s = localStorage.getItem(FROTA_KEY);
     const arr = s ? JSON.parse(s) : null;
     if (Array.isArray(arr) && arr.length) {
-      // completa campos que possam faltar em versões antigas, usando os padrões
-      // de cada veículo (por id) como base e preservando as edições salvas.
       return arr.map((v) => {
         const padrao = VEICULOS.find((x) => x.id === v.id);
         return { carroceria: "sider", altura: 2.7, alturaPiso: 1.2, ...padrao, ...v };
@@ -72,6 +95,8 @@ export default function Cubagem() {
   const [rotacoes, setRotacoes] = useState({});
   const [mostrarTexto, setMostrarTexto] = useState(false);
   const [textoMedidas, setTextoMedidas] = useState("");
+  const [mostrarMedidas, setMostrarMedidas] = useState(true);
+  const [mostrarGrade, setMostrarGrade] = useState(true);
   const inputArquivo = useRef(null);
 
   useEffect(() => {
@@ -84,10 +109,8 @@ export default function Cubagem() {
 
   const fator = unidade === "mm" ? 1000 : unidade === "cm" ? 100 : 1;
   const empilhando = modo === "veiculo" && considerarAltura && remontar;
-  // Altura no cúbico (volume) sempre; no veículo, só quando "Considerar altura".
   const mostrarAltura = modo === "cubico" || (modo === "veiculo" && considerarAltura);
 
-  // Altura que a carga alcança (para o AET): maior material; se empilhar, a maior pilha.
   const alturaCargaCalc = useMemo(() => {
     let h = 0;
     for (const m of materiais) {
@@ -115,7 +138,6 @@ export default function Cubagem() {
     [materiais, larguraPlanejamento, empilhando, alturaMaxRemonte],
   );
 
-  // Peças com rotação e posição manual aplicadas; metros lineares efetivos.
   const pecasFinais = useMemo(
     () =>
       resultado.pecas.map((p) => {
@@ -145,7 +167,6 @@ export default function Cubagem() {
 
   const pesoCubado = resultado.volumeTotal * fatorCubagem;
 
-  // Capacidade volumétrica do veículo selecionado (só carroceria fechada).
   const capacidadeVol =
     veiculo && carroceriaFechada(veiculo.carroceria)
       ? veiculo.comprimento * veiculo.largura * veiculo.altura
@@ -153,7 +174,6 @@ export default function Cubagem() {
   const ocupacaoVol = capacidadeVol ? (resultado.volumeTotal / capacidadeVol) * 100 : null;
   const cabeVol = capacidadeVol != null ? resultado.volumeTotal <= capacidadeVol + 1e-9 : null;
 
-  // Verificação de limites legais / licença (AET) — altura do chão ao topo.
   const alturaTotal = (veiculo ? veiculo.alturaPiso : 0) + alturaCargaCalc;
   const licenca = checarLimites(
     alturaTotal,
@@ -161,6 +181,65 @@ export default function Cubagem() {
     metrosLineares,
     veiculo?.comprimento,
   );
+
+  // ----- derivações de UI para veículos (sem alterar regras) -----
+  const veiculosUI = useMemo(
+    () =>
+      avaliacoes.map((a) => {
+        const v = a.veiculo;
+        const fechado = carroceriaFechada(v.carroceria);
+        if (modo === "cubico") {
+          if (fechado) {
+            const cap = v.comprimento * v.largura * v.altura;
+            const cabe = resultado.volumeTotal <= cap + 1e-9;
+            const oc = cap ? (resultado.volumeTotal / cap) * 100 : 0;
+            return {
+              v,
+              fechado,
+              aberto: false,
+              cabe,
+              ocupacao: oc,
+              motivo: cabe
+                ? null
+                : `Volume ${fmt(resultado.volumeTotal)} m³ acima do interno ${fmt(cap)} m³`,
+              sev: cabe ? (oc >= 90 ? "tight" : "ok") : "no",
+            };
+          }
+          return { v, fechado, aberto: true, cabe: true, ocupacao: null, motivo: null, sev: "open" };
+        }
+        const cabe = a.status !== "nao-cabe";
+        const sev = a.status === "cabe" ? "ok" : a.status === "justo" ? "tight" : "no";
+        return { v, fechado, aberto: false, cabe, ocupacao: a.ocupacaoComprimento, motivo: a.motivos[0] || null, sev };
+      }),
+    [avaliacoes, modo, resultado.volumeTotal],
+  );
+
+  const recomendadoId = useMemo(() => {
+    const cand = veiculosUI.filter((x) => x.cabe && x.ocupacao != null);
+    if (!cand.length) return null;
+    return cand.reduce((b, x) => (x.ocupacao > b.ocupacao ? x : b)).v.id;
+  }, [veiculosUI]);
+
+  const rec = veiculosUI.find((x) => x.v.id === recomendadoId);
+  const compat = veiculosUI.filter((x) => x.v.id !== recomendadoId && x.cabe);
+  const incompat = veiculosUI.filter((x) => !x.cabe);
+
+  const totalUnidades = materiais.reduce((s, m) => s + Math.max(0, Math.floor(m.quantidade || 0)), 0);
+  const cabeVeiculoLinear = veiculo ? metrosLineares <= veiculo.comprimento + 1e-6 : null;
+  const ocupacaoLinear = veiculo && veiculo.comprimento ? (metrosLineares / veiculo.comprimento) * 100 : null;
+
+  function labelStatus(x) {
+    if (x.v.id === recomendadoId) return "Recomendado";
+    if (!x.cabe) return "Incompatível";
+    if (x.aberto) return "Compatível";
+    if (x.ocupacao != null && x.ocupacao < 45) return "Sobredimensionado";
+    return "Compatível";
+  }
+  function iconStatus(sev) {
+    if (sev === "no") return <X size={13} />;
+    if (sev === "open") return <ArrowUp size={13} />;
+    return <Check size={13} />;
+  }
 
   // ----- materiais -----
   function atualizar(id, campo, valor) {
@@ -191,15 +270,12 @@ export default function Cubagem() {
     const arquivos = Array.from(e.target.files || []);
     e.target.value = "";
     if (arquivos.length === 0) return;
-
     setErroAnalise("");
     setObsAnalise("");
     setAnalisando(true);
-
     const coletados = [];
     const observacoes = [];
     const falhas = [];
-
     try {
       for (let i = 0; i < arquivos.length; i++) {
         const arquivo = arquivos[i];
@@ -229,7 +305,6 @@ export default function Cubagem() {
           falhas.push(`${arquivo.name}: ${err instanceof Error ? err.message : "erro"}`);
         }
       }
-
       aplicarResultado(coletados, observacoes, falhas, "na(s) imagem(ns)");
     } finally {
       setAnalisando(false);
@@ -237,7 +312,6 @@ export default function Cubagem() {
     }
   }
 
-  // Aplica os itens identificados (imagem ou texto): SOMA à lista atual.
   function aplicarResultado(coletados, observacoes, falhas, ondeVazio) {
     if (coletados.length === 0) {
       setErroAnalise(falhas[0] || `Não consegui identificar medidas ${ondeVazio}. Lance manualmente.`);
@@ -258,13 +332,12 @@ export default function Cubagem() {
     });
     setUnidade("cm");
     setAvisoConferir(true);
-    const partes = [`${coletados.length} item(ns) adicionado(s).`];
+    const partes = [`${coletados.length} item(ns) adicionado(s)`];
     if (observacoes.length) partes.push(observacoes.join(" · "));
-    setObsAnalise(partes.join(" "));
+    setObsAnalise(partes.join(" · "));
     setErroAnalise(falhas.length ? `Não lido(s): ${falhas.join(" | ")}` : "");
   }
 
-  // Lê um texto colado (mensagem/e-mail) e identifica as medidas.
   async function aoIdentificarTexto() {
     const t = textoMedidas.trim();
     if (!t) return;
@@ -302,18 +375,16 @@ export default function Cubagem() {
     setResumo(true);
   }
 
-  // ---------- Tela de resumo (salvar / imprimir) ----------
+  // ---------- Resumo (salvar / imprimir) ----------
   if (resumo) {
-    const cabeVeiculo =
-      modo === "veiculo" && veiculo ? metrosLineares <= veiculo.comprimento + 1e-6 : null;
     return (
       <div className="resumo-wrap">
         <div className="resumo-actions no-print">
           <button className="btn" onClick={() => setResumo(false)}>
-            ✏️ Editar novamente
+            <Pencil size={15} /> Editar novamente
           </button>
           <button className="btn btn-primary" onClick={() => window.print()}>
-            🖨️ Salvar / Imprimir
+            <Printer size={15} /> Salvar / Imprimir
           </button>
         </div>
 
@@ -323,7 +394,7 @@ export default function Cubagem() {
               TRANS<span>FAST</span>
             </div>
             <div className="folha-title">
-              <div className="folha-h1">Resumo de cubagem</div>
+              <div className="folha-h1">Planejamento de carga</div>
               <div className="folha-date">{dataResumo}</div>
             </div>
           </div>
@@ -340,20 +411,20 @@ export default function Cubagem() {
               <>
                 <div>
                   <span>Metros lineares</span>
-                  <b>{metrosLineares.toFixed(2)} m</b>
+                  <b>{fmt(metrosLineares)} m</b>
                 </div>
                 <div>
                   <span>Área de piso</span>
-                  <b>{resultado.areaTotal.toFixed(2)} m²</b>
+                  <b>{fmt(resultado.areaTotal)} m²</b>
                 </div>
                 <div>
                   <span>Largura útil</span>
-                  <b>{larguraPlanejamento} m</b>
+                  <b>{fmt(larguraPlanejamento)} m</b>
                 </div>
                 {empilhando && (
                   <div>
                     <span>Empilhado até</span>
-                    <b>{alturaMaxRemonte} m</b>
+                    <b>{fmt(alturaMaxRemonte)} m</b>
                   </div>
                 )}
               </>
@@ -361,7 +432,7 @@ export default function Cubagem() {
               <>
                 <div>
                   <span>Volume total</span>
-                  <b>{resultado.volumeTotal.toFixed(3)} m³</b>
+                  <b>{fmt(resultado.volumeTotal, 3)} m³</b>
                 </div>
                 <div>
                   <span>Peso cubado</span>
@@ -385,20 +456,20 @@ export default function Cubagem() {
 
           {veiculo && (
             <div className="folha-veic">
-              <strong>Veículo:</strong> {veiculo.nome} ({veiculo.eixos}) ·{" "}
-              {veiculo.comprimento}×{veiculo.largura}
-              {carroceriaFechada(veiculo.carroceria) ? `×${veiculo.altura}` : ""} m ·{" "}
+              <strong>Veículo:</strong> {veiculo.nome} ({veiculo.eixos}) · {fmt(veiculo.comprimento, 2)}×
+              {fmt(veiculo.largura, 2)}
+              {carroceriaFechada(veiculo.carroceria) ? `×${fmt(veiculo.altura, 2)}` : ""} m ·{" "}
               {nomeCarroceria(veiculo.carroceria)}
-              {cabeVeiculo != null && <> — {cabeVeiculo ? "✓ cabe" : "✗ não cabe"}</>}
+              {cabeVeiculoLinear != null && (
+                <> — {cabeVeiculoLinear ? "cabe" : "não cabe"}</>
+              )}
               {modo === "cubico" && capacidadeVol != null && (
-                <> — {cabeVol ? "✓ cabe" : "✗ não cabe"} ({ocupacaoVol.toFixed(0)}% de{" "}
-                  {capacidadeVol.toFixed(2)} m³)</>
+                <> — {cabeVol ? "cabe" : "não cabe"} ({ocupacaoVol.toFixed(0)}% de {fmt(capacidadeVol)} m³)</>
               )}
               {modo === "veiculo" && considerarAltura && alturaCargaCalc > 0 && (
                 <div style={{ marginTop: 6 }}>
-                  <strong>Altura total:</strong> {alturaTotal.toFixed(2)} m (limite{" "}
-                  {LIMITE_ALTURA.toFixed(2)} m) —{" "}
-                  {licenca.precisa ? "⚠ PRECISA DE LICENÇA (AET)" : "✓ dentro do limite"}
+                  <strong>Altura total:</strong> {fmt(alturaTotal)} m (limite {fmt(LIMITE_ALTURA)} m) —{" "}
+                  {licenca.precisa ? "PRECISA DE LICENÇA (AET)" : "dentro do limite"}
                 </div>
               )}
             </div>
@@ -443,621 +514,774 @@ export default function Cubagem() {
           </table>
 
           <div className="folha-foot">
-            Transfast · Cubagem — documento gerado pelo sistema. Confira os valores.
+            TransFAST · Planejamento de carga — documento gerado pelo sistema. Confira os valores.
           </div>
         </div>
       </div>
     );
   }
 
+  const semPecas = pecasFinais.length === 0;
+
   return (
-    <>
-      <header className="topbar">
-        <div className="topbar-inner">
-          <div className="brand">
-            <img src={logo} alt="Transfast" />
-            <span className="brand-sub">
-              {modo === "veiculo" ? "Metros lineares e veículo ideal" : "Volume (m³) e peso cubado"}
+    <div className="app">
+      {/* ---------------- App bar ---------------- */}
+      <header className="appbar">
+        <div className="container appbar-inner">
+          <div className="appbar-left">
+            <TransfastLogo width={140} />
+            <span className="divider-v" />
+            <span className="tool-id">
+              <b>Planejamento de Carga</b>
+              <span>Cubagem, metros lineares e veículo ideal</span>
             </span>
           </div>
-          <div className="modo-tabs">
-            <button
-              className={`modo-tab ${modo === "veiculo" ? "ativo" : ""}`}
-              onClick={() => setModo("veiculo")}
-            >
-              🚚 Medidas do veículo
-            </button>
-            <button
-              className={`modo-tab ${modo === "cubico" ? "ativo" : ""}`}
-              onClick={() => setModo("cubico")}
-            >
-              📦 Medidas cúbicas
-            </button>
+          <div className="appbar-right">
+            <span className="weg-badge" title="Ferramenta exclusiva para a WEG">
+              Exclusivo <b>WEG</b>
+            </span>
+            <div className="seg" role="tablist" aria-label="Tipo de cálculo">
+              <button
+                role="tab"
+                aria-selected={modo === "veiculo"}
+                className={`seg-btn ${modo === "veiculo" ? "on" : ""}`}
+                onClick={() => setModo("veiculo")}
+              >
+                <Truck size={15} /> Medidas do veículo
+              </button>
+              <button
+                role="tab"
+                aria-selected={modo === "cubico"}
+                className={`seg-btn ${modo === "cubico" ? "on" : ""}`}
+                onClick={() => setModo("cubico")}
+              >
+                <Box size={15} /> Medidas cúbicas
+              </button>
+            </div>
           </div>
         </div>
       </header>
 
-      <div className="page">
-        {/* Coluna principal */}
-        <section className="col">
-          <div className="card">
-            <div className="toolbar">
-              <h2 className="card-title" style={{ margin: 0 }}>
-                Materiais
-              </h2>
-              <div className="toolbar-right">
-                <span className="muted">Unidade:</span>
-                <select className="select" value={unidade} onChange={(e) => setUnidade(e.target.value)}>
-                  <option value="mm">mm</option>
-                  <option value="cm">cm</option>
-                  <option value="m">m</option>
-                </select>
-                <button
-                  className="btn btn-primary"
-                  onClick={() => inputArquivo.current?.click()}
-                  disabled={analisando}
-                >
-                  {analisando
-                    ? progresso
-                      ? `Analisando ${progresso}…`
-                      : "Analisando…"
-                    : "📷 Adicionar arquivo(s)"}
-                </button>
-                <button
-                  className="btn"
-                  onClick={() => setMostrarTexto((v) => !v)}
-                  disabled={analisando}
-                >
-                  📝 Colar texto
-                </button>
-                <input
-                  ref={inputArquivo}
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  style={{ display: "none" }}
-                  onChange={aoEscolherArquivo}
-                />
-              </div>
+      {/* ---------------- Hero ---------------- */}
+      <div className="container">
+        <div className="hero">
+          <div className="hero-left">
+            <span className="eyebrow">TransFAST × WEG</span>
+            <h1 className="hero-title">Planeje a ocupação da carga com mais precisão.</h1>
+            <p className="hero-desc">
+              Insira as dimensões dos materiais, visualize o arranjo e identifique o veículo mais
+              adequado para a operação.
+            </p>
+          </div>
+          <div className="hero-stats">
+            <div className="stat">
+              <div className="stat-num">{materiais.length}</div>
+              <div className="stat-label">Materiais</div>
             </div>
+            <div className="stat">
+              <div className="stat-num">{totalUnidades}</div>
+              <div className="stat-label">Peças totais</div>
+            </div>
+            <div className="stat">
+              <div className="stat-num">{unidade}</div>
+              <div className="stat-label">Unidade</div>
+            </div>
+          </div>
+        </div>
+      </div>
 
-            {mostrarTexto && (
-              <div className="texto-box">
-                <textarea
-                  className="inp obs-area"
-                  rows={3}
-                  placeholder="Cole aqui o texto com as medidas (ex.: '3 caixas de 1,20 x 0,80 x 0,50 m, palete 100x120, motor 45x45x60 - 2un')…"
-                  value={textoMedidas}
-                  onChange={(e) => setTextoMedidas(e.target.value)}
-                />
-                <div className="texto-box-acoes">
-                  <button className="btn" onClick={() => setTextoMedidas("")} disabled={analisando}>
-                    Limpar
+      {/* ---------------- Grid principal ---------------- */}
+      <div className="container">
+        <div className="grid">
+          {/* ============ Coluna operacional ============ */}
+          <section className="main-col">
+            {/* --------- Materiais --------- */}
+            <div className="card">
+              <div className="card-head">
+                <div>
+                  <h2 className="card-title">
+                    <Package size={17} /> Materiais da carga
+                  </h2>
+                  <p className="card-desc">
+                    Adicione manualmente ou importe as informações para calcular a ocupação.
+                  </p>
+                </div>
+                <div className="card-actions">
+                  <div className="input-suffix" title="Unidade de medida">
+                    <select
+                      className="select"
+                      value={unidade}
+                      onChange={(e) => setUnidade(e.target.value)}
+                      aria-label="Unidade de medida"
+                    >
+                      <option value="mm">mm</option>
+                      <option value="cm">cm</option>
+                      <option value="m">m</option>
+                    </select>
+                  </div>
+                  <button
+                    className="btn"
+                    onClick={() => inputArquivo.current?.click()}
+                    disabled={analisando}
+                    title="Importar imagem ou tabela"
+                  >
+                    <Upload size={15} />
+                    {analisando ? (progresso ? `Lendo ${progresso}…` : "Lendo…") : "Importar arquivo"}
                   </button>
-                  <button className="btn btn-primary" onClick={aoIdentificarTexto} disabled={analisando}>
-                    {analisando ? "Identificando…" : "🔎 Identificar medidas"}
+                  <button
+                    className="btn"
+                    onClick={() => setMostrarTexto((v) => !v)}
+                    disabled={analisando}
+                  >
+                    <ClipboardPaste size={15} /> Colar texto
                   </button>
+                  <button className="btn btn-primary" onClick={adicionar}>
+                    <Plus size={15} /> Adicionar material
+                  </button>
+                  <input
+                    ref={inputArquivo}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    style={{ display: "none" }}
+                    onChange={aoEscolherArquivo}
+                  />
                 </div>
               </div>
-            )}
 
-            {avisoConferir && (
-              <p className="alert alert-warn">
-                ⚠ Confira os valores identificados — a IA acerta muito, mas pode errar
-                quantidades ou medidas.
-                <button className="alert-x" onClick={() => setAvisoConferir(false)} title="Ok">
-                  ✕
-                </button>
-              </p>
-            )}
-            {erroAnalise && <p className="alert alert-error">{erroAnalise}</p>}
-            {obsAnalise && <p className="alert alert-info">🔍 {obsAnalise}</p>}
+              {mostrarTexto && (
+                <div className="texto-box">
+                  <textarea
+                    className="inp obs-area"
+                    rows={3}
+                    placeholder="Cole o texto com as medidas (ex.: '3 caixas de 1,20 x 0,80 x 0,50 m, palete 100x120, motor 45x45x60 - 2un')…"
+                    value={textoMedidas}
+                    onChange={(e) => setTextoMedidas(e.target.value)}
+                  />
+                  <div className="texto-box-acoes">
+                    <button className="btn" onClick={() => setTextoMedidas("")} disabled={analisando}>
+                      Limpar
+                    </button>
+                    <button className="btn btn-primary" onClick={aoIdentificarTexto} disabled={analisando}>
+                      <Search size={15} /> {analisando ? "Identificando…" : "Identificar medidas"}
+                    </button>
+                  </div>
+                </div>
+              )}
 
-            <div className="table-wrap">
-              <table className="mat">
-                <thead>
-                  <tr>
-                    <th></th>
-                    <th>Material</th>
-                    <th>Compr. ({unidade})</th>
-                    <th>Larg. ({unidade})</th>
-                    {mostrarAltura && <th>Alt. ({unidade})</th>}
-                    <th>Qtd</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {materiais.map((m) => (
-                    <tr key={m.id}>
-                      <td>
-                        <span className="swatch" style={{ backgroundColor: m.cor }} />
-                      </td>
-                      <td>
-                        <input
-                          className="inp inp-nome"
-                          value={m.nome}
-                          onChange={(e) => atualizar(m.id, "nome", e.target.value)}
-                        />
-                      </td>
-                      <td>
-                        <NumInput
-                          className="inp inp-num"
-                          min={0}
-                          value={exibir(m.comprimento)}
-                          onChange={(n) => definirDimensao(m.id, "comprimento", n)}
-                        />
-                      </td>
-                      <td>
-                        <NumInput
-                          className="inp inp-num"
-                          min={0}
-                          value={exibir(m.largura)}
-                          onChange={(n) => definirDimensao(m.id, "largura", n)}
-                        />
-                      </td>
-                      {mostrarAltura && (
-                        <td>
-                          <NumInput
-                            className="inp inp-num"
-                            min={0}
-                            value={exibir(m.altura)}
-                            onChange={(n) => definirDimensao(m.id, "altura", n)}
+              {avisoConferir && (
+                <div className="ai-alert">
+                  <Sparkles size={18} className="ai-alert-ic" />
+                  <div className="ai-alert-body">
+                    <div className="ai-alert-title">Revise os dados identificados</div>
+                    <div className="ai-alert-desc">
+                      As dimensões foram interpretadas automaticamente. Confirme medidas e
+                      quantidades antes de continuar.
+                    </div>
+                    {obsAnalise && <div className="ai-alert-meta">{obsAnalise}</div>}
+                  </div>
+                  <button
+                    className="ai-alert-x"
+                    onClick={() => setAvisoConferir(false)}
+                    aria-label="Fechar aviso"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              )}
+              {erroAnalise && <p className="alert alert-error">{erroAnalise}</p>}
+              {!avisoConferir && obsAnalise && <p className="alert alert-info">{obsAnalise}</p>}
+
+              <div className="table-wrap">
+                <table className="mat">
+                  <thead>
+                    <tr>
+                      <th aria-hidden></th>
+                      <th>Material</th>
+                      <th>Comprimento</th>
+                      <th>Largura</th>
+                      {mostrarAltura && <th>Altura</th>}
+                      <th>Qtd</th>
+                      <th aria-hidden></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {materiais.map((m) => (
+                      <tr key={m.id}>
+                        <td data-label="">
+                          <span
+                            className="dot"
+                            style={{ backgroundColor: m.cor }}
+                            title={m.nome}
                           />
                         </td>
-                      )}
-                      <td>
-                        <NumInput
-                          className="inp inp-qtd"
-                          min={1}
-                          value={m.quantidade}
-                          onChange={(n) => atualizar(m.id, "quantidade", Math.max(1, Math.floor(n)))}
-                        />
-                      </td>
-                      <td style={{ textAlign: "right" }}>
-                        <button className="remove-btn" onClick={() => remover(m.id)} title="Remover">
-                          ✕
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <button className="btn" style={{ marginTop: 12 }} onClick={adicionar}>
-              + Adicionar material
-            </button>
-          </div>
-
-          {modo === "veiculo" ? (
-            <div className="card">
-              <div className="toolbar" style={{ marginBottom: 8 }}>
-                <h2 className="card-title" style={{ margin: 0 }}>
-                  Vista de cima
-                </h2>
-                <button className="link" onClick={refazer} title="Refazer o arranjo automático">
-                  ↻ Refazer arranjo
-                </button>
-              </div>
-              <p className="muted" style={{ marginTop: 0, marginBottom: 10 }}>
-                Arraste para reposicionar — encaixa sozinho com folga de 2 cm, sem sobrepor.
-                Duplo clique gira o material. Passe o mouse para ver as medidas.
-              </p>
-              <TruckView
-                pecas={pecasFinais}
-                larguraPlanejamento={larguraPlanejamento}
-                metrosLineares={metrosLineares}
-                comprimentoVeiculo={veiculo?.comprimento}
-                nomeVeiculo={veiculo?.nome}
-                fator={fator}
-                unidade={unidade}
-                editavel
-                onMover={mover}
-                onGirar={girar}
-                margem={MARGEM}
-              />
-              {empilhando && (
-                <p className="muted" style={{ marginTop: 8 }}>
-                  ×N indica quantas peças estão empilhadas na mesma posição (até {alturaMaxRemonte} m).
-                </p>
-              )}
-              {resultado.algumaForaDeMedida && (
-                <p className="warn">
-                  ⚠ Algum material é mais largo que a largura útil ({larguraPlanejamento} m).
-                </p>
-              )}
-            </div>
-          ) : (
-            <div className="card">
-              <h2 className="card-title">Volume por material</h2>
-              <ul className="vol-list">
-                {materiais.map((m) => {
-                  const vol =
-                    m.comprimento * m.largura * m.altura * Math.max(0, Math.floor(m.quantidade || 0));
-                  return (
-                    <li key={m.id} className="vol-item">
-                      <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <span className="swatch" style={{ backgroundColor: m.cor, height: 12, width: 12 }} />
-                        {m.nome}
-                        <span className="dim">
-                          ({exibir(m.comprimento)}×{exibir(m.largura)}×{exibir(m.altura)} {unidade} · {m.quantidade}un)
-                        </span>
-                      </span>
-                      <strong>{vol.toFixed(3)} m³</strong>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          )}
-        </section>
-
-        {/* Coluna lateral */}
-        <aside className="col">
-          <div className="card">
-            <h2 className="card-title">Resultado</h2>
-
-            {modo === "veiculo" ? (
-              <>
-                <div className="hero">
-                  <div className="hero-num">{metrosLineares.toFixed(2)} m</div>
-                  <div className="hero-label">metros lineares</div>
-                </div>
-                <dl className="dl">
-                  <div className="dl-row">
-                    <dt>Área de piso</dt>
-                    <dd>{resultado.areaTotal.toFixed(2)} m²</dd>
-                  </div>
-                  <div className="dl-row">
-                    <dt>Peças</dt>
-                    <dd>
-                      {resultado.totalPecas}
-                      {empilhando && ` em ${resultado.totalPosicoes} pilha(s)`}
-                    </dd>
-                  </div>
-                  <div className="dl-row">
-                    <dt>Largura útil</dt>
-                    <dd>
-                      {larguraPlanejamento} m{veiculo ? ` (${veiculo.nome})` : ""}
-                    </dd>
-                  </div>
-                </dl>
-
-                <div className="field-group">
-                  {!veiculo && (
-                    <label className="field">
-                      <span>Largura útil (m)</span>
-                      <NumInput
-                        className="inp inp-mini"
-                        min={0.5}
-                        value={larguraManual}
-                        onChange={(n) => setLarguraManual(n || 2.4)}
-                      />
-                    </label>
-                  )}
-                  <label className="field">
-                    <span>Peso total (kg)</span>
-                    <input
-                      className="inp inp-mini"
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="opcional"
-                      value={pesoTotal}
-                      onChange={(e) => setPesoTotal(e.target.value)}
-                    />
-                  </label>
-
-                  <div className="subbox">
-                    <label className="check">
-                      <input
-                        type="checkbox"
-                        checked={considerarAltura}
-                        onChange={(e) => setConsiderarAltura(e.target.checked)}
-                      />
-                      Considerar altura (limite / AET)?
-                    </label>
-                    {considerarAltura && (
-                      <div style={{ marginTop: 8, display: "grid", gap: 8 }}>
-                        <span className="muted" style={{ fontSize: 12 }}>
-                          Informe a altura de cada material (coluna Alt.) para verificar o AET.
-                        </span>
-                        <label className="check">
+                        <td data-label="Material">
                           <input
-                            type="checkbox"
-                            checked={remontar}
-                            onChange={(e) => setRemontar(e.target.checked)}
+                            className="inp inp-nome"
+                            value={m.nome}
+                            title={m.nome}
+                            onChange={(e) => atualizar(m.id, "nome", e.target.value)}
                           />
-                          Material pode ser remontado (empilhado)?
-                        </label>
-                        {remontar && (
-                          <div style={{ display: "grid", gap: 4 }}>
-                            <label className="field">
-                              <span>Empilhar até (m)</span>
-                              <NumInput
-                                className="inp inp-mini"
-                                min={0}
-                                value={alturaMaxRemonte}
-                                onChange={(n) => setAlturaMaxRemonte(n || 0)}
-                              />
-                            </label>
-                            {veiculo && carroceriaFechada(veiculo.carroceria) && (
-                              <button
-                                className="link"
-                                onClick={() => setAlturaMaxRemonte(veiculo.altura)}
-                              >
-                                ↧ usar altura interna do {veiculo.nome} ({veiculo.altura} m)
-                              </button>
-                            )}
+                        </td>
+                        <td data-label={`Comprimento (${unidade})`}>
+                          <div className="input-suffix">
+                            <NumInput
+                              className="inp inp-num"
+                              min={0}
+                              value={exibir(m.comprimento)}
+                              onChange={(n) => definirDimensao(m.id, "comprimento", n)}
+                            />
+                            <span className="suffix">{unidade}</span>
                           </div>
+                        </td>
+                        <td data-label={`Largura (${unidade})`}>
+                          <div className="input-suffix">
+                            <NumInput
+                              className="inp inp-num"
+                              min={0}
+                              value={exibir(m.largura)}
+                              onChange={(n) => definirDimensao(m.id, "largura", n)}
+                            />
+                            <span className="suffix">{unidade}</span>
+                          </div>
+                        </td>
+                        {mostrarAltura && (
+                          <td data-label={`Altura (${unidade})`}>
+                            <div className="input-suffix">
+                              <NumInput
+                                className="inp inp-num"
+                                min={0}
+                                value={exibir(m.altura)}
+                                onChange={(n) => definirDimensao(m.id, "altura", n)}
+                              />
+                              <span className="suffix">{unidade}</span>
+                            </div>
+                          </td>
                         )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="hero">
-                  <div className="hero-num">{resultado.volumeTotal.toFixed(3)} m³</div>
-                  <div className="hero-label">volume total (cubagem)</div>
-                </div>
-                <dl className="dl">
-                  <div className="dl-row">
-                    <dt>Peso cubado</dt>
-                    <dd>
-                      <strong>{Math.round(pesoCubado)} kg</strong>
-                    </dd>
-                  </div>
-                  <div className="dl-row">
-                    <dt>Total de peças</dt>
-                    <dd>{resultado.totalPecas}</dd>
-                  </div>
-                </dl>
+                        <td data-label="Quantidade">
+                          <NumInput
+                            className="inp inp-qtd"
+                            min={1}
+                            value={m.quantidade}
+                            onChange={(n) => atualizar(m.id, "quantidade", Math.max(1, Math.floor(n)))}
+                          />
+                        </td>
+                        <td className="cell-remove" data-label="">
+                          <button
+                            className="remove-btn"
+                            onClick={() => remover(m.id)}
+                            aria-label={`Remover ${m.nome}`}
+                            title="Remover material"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
 
-                {/* Cabe no veículo? (só carroceria fechada) */}
-                {veiculo && capacidadeVol != null ? (
-                  <div className={`capbox ${cabeVol ? "cap-ok" : "cap-no"}`}>
-                    <div className="cap-top">
-                      <span>
-                        {veiculo.nome} · {nomeCarroceria(veiculo.carroceria)}
-                      </span>
-                      <span className="cap-badge">{cabeVol ? "✓ cabe" : "✗ não cabe"}</span>
-                    </div>
-                    <div className="cap-bar">
-                      <div
-                        className="cap-fill"
-                        style={{ width: `${Math.min(100, ocupacaoVol).toFixed(0)}%` }}
-                      />
-                    </div>
-                    <div className="cap-meta">
-                      {resultado.volumeTotal.toFixed(2)} / {capacidadeVol.toFixed(2)} m³ interno ·{" "}
-                      {ocupacaoVol.toFixed(0)}%
-                    </div>
-                  </div>
-                ) : veiculo ? (
-                  <p className="muted" style={{ marginTop: 10 }}>
-                    {veiculo.nome} tem carroceria aberta ({nomeCarroceria(veiculo.carroceria)}) — sem
-                    limite de altura fixo para calcular volume interno.
-                  </p>
-                ) : (
-                  <p className="muted" style={{ marginTop: 10 }}>
-                    Selecione um veículo abaixo (baú/sider) para ver se a carga cabe pelo volume.
-                  </p>
-                )}
-
-                <div className="field-group">
-                  <label className="field">
-                    <span>Fator de cubagem (kg/m³)</span>
-                    <NumInput
-                      className="inp inp-mini"
-                      min={0}
-                      value={fatorCubagem}
-                      onChange={(n) => setFatorCubagem(n || 0)}
-                    />
-                  </label>
-                  <p className="muted" style={{ margin: 0, fontSize: 12 }}>
-                    Peso cubado = volume × fator (padrão rodoviário ≈ 300 kg/m³).
-                  </p>
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Limite de altura / Licença (AET) — modo veículo, quando considerar altura */}
-          {modo === "veiculo" && considerarAltura && (
-            <div className="card">
-              <h2 className="card-title">Altura e licença (AET)</h2>
-              {alturaCargaCalc <= 0 ? (
-                <p className="muted">
-                  Informe a <strong>altura</strong> dos materiais (coluna Alt.) para calcular a
-                  altura da carga.
-                </p>
-              ) : veiculo ? (
-                <>
-                  <dl className="dl">
-                    <div className="dl-row">
-                      <dt>Altura da carga {empilhando ? "(empilhada)" : "(maior material)"}</dt>
-                      <dd>{(alturaCargaCalc * fator).toFixed(0)} {unidade} · {alturaCargaCalc.toFixed(2)} m</dd>
-                    </div>
-                    <div className="dl-row">
-                      <dt>Assoalho do {veiculo.nome}</dt>
-                      <dd>{veiculo.alturaPiso} m</dd>
-                    </div>
-                    <div className="dl-row">
-                      <dt>Altura total (chão→topo)</dt>
-                      <dd>
-                        <strong>{alturaTotal.toFixed(2)} m</strong>
-                      </dd>
-                    </div>
-                    <div className="dl-row">
-                      <dt>Limite legal</dt>
-                      <dd>{LIMITE_ALTURA.toFixed(2)} m</dd>
-                    </div>
-                  </dl>
-                  {licenca.precisa ? (
-                    <div className="licenca-alerta">
-                      ⚠ Veículo precisa de licença (AET)
-                      <ul>
-                        {licenca.motivos.map((m, i) => (
-                          <li key={i}>{m}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : (
-                    <div className="licenca-ok">✓ Dentro dos limites — não precisa de licença</div>
-                  )}
-                </>
-              ) : (
-                <p className="muted">
-                  Altura da carga: <strong>{alturaCargaCalc.toFixed(2)} m</strong>. Selecione um
-                  veículo abaixo para somar o assoalho e verificar a licença.
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* Veículos (nos dois modos) */}
-          <div className="card">
-            <div className="toolbar" style={{ marginBottom: 8 }}>
-              <h2 className="card-title" style={{ margin: 0 }}>
-                Veículos
-              </h2>
-              <button className="link" onClick={resetarFrota} title="Voltar às medidas padrão">
-                restaurar padrão
+              <button className="btn add-row" onClick={adicionar}>
+                <Plus size={15} /> Adicionar material
               </button>
             </div>
-            <p className="muted" style={{ marginTop: 0, marginBottom: 12 }}>
-              Clique para selecionar e editar as medidas (em metros).
-            </p>
-            <ul className="veic-list">
-              {avaliacoes.map(({ veiculo: v, status, motivos, ocupacaoComprimento }) => {
-                const ativo = v.id === veiculoSelecionado;
-                const fechado = carroceriaFechada(v.carroceria);
 
-                // status exibido depende do modo
-                let cls = status;
-                let badge = status === "cabe" ? "✓" : status === "justo" ? "≈" : "✗";
-                if (modo === "cubico") {
-                  if (fechado) {
-                    const cap = v.comprimento * v.largura * v.altura;
-                    const cabe = resultado.volumeTotal <= cap + 1e-9;
-                    const oc = cap ? (resultado.volumeTotal / cap) * 100 : 0;
-                    cls = cabe ? (oc >= 90 ? "justo" : "cabe") : "nao-cabe";
-                    badge = cabe ? "✓" : "✗";
-                  } else {
-                    cls = "aberto";
-                    badge = "↑";
-                  }
-                }
-
-                return (
-                  <li key={v.id}>
+            {/* --------- Vista superior / volume por material --------- */}
+            {modo === "veiculo" ? (
+              <div className="card">
+                <div className="viz-head">
+                  <div>
+                    <h2 className="card-title">
+                      <Ruler size={17} /> Distribuição da carga
+                    </h2>
+                  </div>
+                  <div className="viz-toolbar">
                     <button
-                      className={`veic ${cls} ${ativo ? "ativo" : ""}`}
-                      onClick={() => setVeiculoSelecionado(ativo ? "" : v.id)}
+                      className={`iconbtn viz-tool ${mostrarMedidas ? "on" : ""}`}
+                      onClick={() => setMostrarMedidas((v) => !v)}
+                      aria-label="Mostrar medidas"
+                      title="Mostrar medidas nas peças"
                     >
-                      <div className="veic-top">
-                        <span className="veic-nome">{v.nome}</span>
-                        <span className={`badge ${cls}`}>{badge}</span>
-                      </div>
-                      <div className="veic-meta">
-                        <span>
-                          {v.comprimento}×{v.largura}
-                          {fechado ? `×${v.altura}` : ""} m · {nomeCarroceria(v.carroceria)} ·{" "}
-                          {v.eixos} · {(v.pesoMax / 1000).toFixed(0)} t
-                        </span>
-                        {modo === "veiculo" && status !== "nao-cabe" && (
-                          <span>{ocupacaoComprimento.toFixed(0)}%</span>
-                        )}
-                      </div>
-                      {modo === "veiculo" && status === "nao-cabe" && motivos[0] && (
-                        <div className="veic-motivo">{motivos[0]}</div>
-                      )}
+                      <Tag size={16} />
                     </button>
+                    <button
+                      className={`iconbtn viz-tool ${mostrarGrade ? "on" : ""}`}
+                      onClick={() => setMostrarGrade((v) => !v)}
+                      aria-label="Mostrar grade"
+                      title="Mostrar grade"
+                    >
+                      <Grid3x3 size={16} />
+                    </button>
+                    <button
+                      className="iconbtn viz-tool"
+                      onClick={refazer}
+                      aria-label="Refazer arranjo"
+                      title="Recalcula a posição das peças dentro do veículo"
+                    >
+                      <RotateCcw size={16} />
+                    </button>
+                  </div>
+                </div>
+                <p className="viz-hint">
+                  Arraste para reposicionar — encaixa sozinho com folga de 2 cm, sem sobrepor. Duplo
+                  clique gira o material. Passe o mouse para ver as medidas.
+                </p>
 
-                    {ativo && (
-                      <div className="veic-edit">
-                        <label className="field">
-                          <span>Comprimento (m)</span>
-                          <NumInput
-                            className="inp inp-mini"
-                            min={0.1}
-                            value={v.comprimento}
-                            onChange={(n) => atualizarVeiculo(v.id, "comprimento", n)}
-                          />
-                        </label>
-                        <label className="field">
-                          <span>Largura (m)</span>
-                          <NumInput
-                            className="inp inp-mini"
-                            min={0.1}
-                            value={v.largura}
-                            onChange={(n) => atualizarVeiculo(v.id, "largura", n)}
-                          />
-                        </label>
-                        <label className="field">
-                          <span>Carroceria</span>
-                          <select
-                            className="select"
-                            value={v.carroceria}
-                            onChange={(e) => atualizarVeiculo(v.id, "carroceria", e.target.value)}
-                          >
-                            {CARROCERIAS.map((c) => (
-                              <option key={c.id} value={c.id}>
-                                {c.nome}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        {fechado && (
-                          <label className="field">
-                            <span>Altura interna (m)</span>
-                            <NumInput
-                              className="inp inp-mini"
-                              min={0.1}
-                              value={v.altura}
-                              onChange={(n) => atualizarVeiculo(v.id, "altura", n)}
+                {semPecas ? (
+                  <div className="empty">
+                    <Package size={26} className="empty-ic" />
+                    <div className="empty-title">Sem carga para exibir</div>
+                    <div className="empty-desc">
+                      A distribuição da carga aparecerá aqui após o cadastro dos materiais.
+                    </div>
+                  </div>
+                ) : (
+                  <div className="viz-body">
+                    <TruckView
+                      pecas={pecasFinais}
+                      larguraPlanejamento={larguraPlanejamento}
+                      metrosLineares={metrosLineares}
+                      comprimentoVeiculo={veiculo?.comprimento}
+                      nomeVeiculo={veiculo?.nome}
+                      fator={fator}
+                      unidade={unidade}
+                      editavel
+                      onMover={mover}
+                      onGirar={girar}
+                      margem={MARGEM}
+                      mostrarMedidas={mostrarMedidas}
+                      mostrarGrade={mostrarGrade}
+                      semStatus
+                    />
+                  </div>
+                )}
+
+                {!semPecas && veiculo && (
+                  <div className={`load-status ${cabeVeiculoLinear ? "ok" : "no"}`}>
+                    {cabeVeiculoLinear ? (
+                      <Check size={18} className="load-status-ic" />
+                    ) : (
+                      <AlertTriangle size={18} className="load-status-ic" />
+                    )}
+                    <div>
+                      <div className="load-status-title">
+                        {cabeVeiculoLinear
+                          ? `A carga cabe no ${veiculo.nome}`
+                          : `A carga excede o ${veiculo.nome}`}
+                      </div>
+                      <div className="load-status-desc">
+                        {cabeVeiculoLinear
+                          ? `O arranjo utiliza aproximadamente ${ocupacaoLinear.toFixed(0)}% do comprimento disponível.`
+                          : `A carga excede o comprimento disponível em ${fmt(metrosLineares - veiculo.comprimento)} m.`}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {empilhando && (
+                  <p className="muted" style={{ marginTop: 10 }}>
+                    ×N indica quantas peças estão empilhadas na mesma posição (até {fmt(alturaMaxRemonte)} m).
+                  </p>
+                )}
+                {resultado.algumaForaDeMedida && (
+                  <p className="warn">
+                    <AlertTriangle size={14} /> Algum material é mais largo que a largura útil (
+                    {fmt(larguraPlanejamento)} m).
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="card">
+                <h2 className="card-title">
+                  <Box size={17} /> Volume por material
+                </h2>
+                <ul className="vol-list" style={{ marginTop: 14 }}>
+                  {materiais.map((m) => {
+                    const vol =
+                      m.comprimento * m.largura * m.altura * Math.max(0, Math.floor(m.quantidade || 0));
+                    return (
+                      <li key={m.id} className="vol-item">
+                        <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <span className="dot" style={{ backgroundColor: m.cor }} />
+                          {m.nome}
+                          <span className="dim">
+                            {exibir(m.comprimento)}×{exibir(m.largura)}×{exibir(m.altura)} {unidade} ·{" "}
+                            {m.quantidade}un
+                          </span>
+                        </span>
+                        <strong>{fmt(vol, 3)} m³</strong>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+          </section>
+
+          {/* ============ Painel lateral ============ */}
+          <aside className="side-col">
+            {/* --------- Resultado --------- */}
+            <div className="card">
+              <h2 className="card-title" style={{ marginBottom: 16 }}>
+                Resultado estimado
+              </h2>
+
+              {modo === "veiculo" ? (
+                <>
+                  <div className="metric">
+                    <div className="metric-value">{fmt(metrosLineares)} m</div>
+                    <div className="metric-label">Metros lineares</div>
+                  </div>
+                  <div className="metrics-grid">
+                    <div className="metric-item">
+                      <div className="metric-item-l">Área ocupada</div>
+                      <div className="metric-item-v">{fmt(resultado.areaTotal)} m²</div>
+                    </div>
+                    <div className="metric-item">
+                      <div className="metric-item-l">Peças</div>
+                      <div className="metric-item-v">
+                        {resultado.totalPecas}
+                        {empilhando && <small> · {resultado.totalPosicoes} pilha(s)</small>}
+                      </div>
+                    </div>
+                    <div className="metric-item">
+                      <div className="metric-item-l">Largura útil</div>
+                      <div className="metric-item-v">
+                        {fmt(larguraPlanejamento)} m
+                        {veiculo && <small> · {veiculo.nome}</small>}
+                      </div>
+                    </div>
+                    <div className="metric-item">
+                      <div className="metric-item-l">Peso total</div>
+                      <div className="metric-item-v">
+                        {pesoNum > 0 ? `${pesoNum} kg` : <small>Não informado</small>}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="field-group">
+                    {!veiculo && (
+                      <label className="field">
+                        <span>Largura útil (m)</span>
+                        <NumInput
+                          className="inp"
+                          min={0.5}
+                          value={larguraManual}
+                          onChange={(n) => setLarguraManual(n || 2.4)}
+                        />
+                      </label>
+                    )}
+                    <div className="weight-box">
+                      <div className="weight-l">Peso total da carga</div>
+                      <div className="weight-row">
+                        <input
+                          className="inp"
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="Digite o peso"
+                          value={pesoTotal}
+                          onChange={(e) => setPesoTotal(e.target.value)}
+                        />
+                        <span className="u">kg</span>
+                      </div>
+                    </div>
+
+                    <div className="switch-card">
+                      <label className="switch-row">
+                        <input
+                          type="checkbox"
+                          checked={considerarAltura}
+                          onChange={(e) => setConsiderarAltura(e.target.checked)}
+                        />
+                        <span className="switch" aria-hidden />
+                        <span className="switch-txt">
+                          <b>Considerar altura e restrições especiais</b>
+                          <span>Verifica o limite legal e a possível necessidade de AET.</span>
+                        </span>
+                      </label>
+                      {considerarAltura && (
+                        <div className="switch-inner">
+                          <span className="muted" style={{ fontSize: 12 }}>
+                            Informe a altura de cada material (coluna Altura) para verificar o AET.
+                          </span>
+                          <label className="check-row">
+                            <input
+                              type="checkbox"
+                              checked={remontar}
+                              onChange={(e) => setRemontar(e.target.checked)}
                             />
+                            Material pode ser remontado (empilhado)
                           </label>
-                        )}
-                        <label className="field">
-                          <span>Altura do assoalho (m)</span>
-                          <NumInput
-                            className="inp inp-mini"
-                            min={0}
-                            value={v.alturaPiso}
-                            onChange={(n) => atualizarVeiculo(v.id, "alturaPiso", n)}
-                          />
-                        </label>
+                          {remontar && (
+                            <>
+                              <label className="field">
+                                <span>Empilhar até (m)</span>
+                                <NumInput
+                                  className="inp"
+                                  min={0}
+                                  value={alturaMaxRemonte}
+                                  onChange={(n) => setAlturaMaxRemonte(n || 0)}
+                                />
+                              </label>
+                              {veiculo && carroceriaFechada(veiculo.carroceria) && (
+                                <button
+                                  className="link"
+                                  onClick={() => setAlturaMaxRemonte(veiculo.altura)}
+                                >
+                                  <ArrowUp size={13} /> usar altura interna do {veiculo.nome} (
+                                  {fmt(veiculo.altura)} m)
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="metric">
+                    <div className="metric-value">{fmt(resultado.volumeTotal, 3)} m³</div>
+                    <div className="metric-label">Volume total (cubagem)</div>
+                  </div>
+                  <div className="metrics-grid">
+                    <div className="metric-item">
+                      <div className="metric-item-l">Peso cubado</div>
+                      <div className="metric-item-v">{Math.round(pesoCubado)} kg</div>
+                    </div>
+                    <div className="metric-item">
+                      <div className="metric-item-l">Peças</div>
+                      <div className="metric-item-v">{resultado.totalPecas}</div>
+                    </div>
+                  </div>
+
+                  {veiculo && capacidadeVol != null ? (
+                    <div className={`capbox ${cabeVol ? "cap-ok" : "cap-no"}`}>
+                      <div className="cap-top">
+                        <span>
+                          {veiculo.nome} · {nomeCarroceria(veiculo.carroceria)}
+                        </span>
+                        <span className="cap-badge">
+                          {cabeVol ? <Check size={13} /> : <X size={13} />} {cabeVol ? "cabe" : "não cabe"}
+                        </span>
+                      </div>
+                      <div className="bar">
+                        <i style={{ width: `${Math.min(100, ocupacaoVol).toFixed(0)}%` }} />
+                      </div>
+                      <div className="cap-meta">
+                        {fmt(resultado.volumeTotal)} / {fmt(capacidadeVol)} m³ interno · {ocupacaoVol.toFixed(0)}%
+                      </div>
+                    </div>
+                  ) : veiculo ? (
+                    <p className="muted" style={{ marginTop: 12 }}>
+                      {veiculo.nome} tem carroceria aberta ({nomeCarroceria(veiculo.carroceria)}) — sem
+                      limite de altura fixo para calcular o volume interno.
+                    </p>
+                  ) : (
+                    <p className="muted" style={{ marginTop: 12 }}>
+                      Selecione um veículo baú/sider abaixo para verificar se a carga cabe pelo volume.
+                    </p>
+                  )}
+
+                  <div className="field-group">
+                    <label className="field">
+                      <span>Fator de cubagem (kg/m³)</span>
+                      <NumInput
+                        className="inp"
+                        min={0}
+                        value={fatorCubagem}
+                        onChange={(n) => setFatorCubagem(n || 0)}
+                      />
+                    </label>
+                    <p className="muted" style={{ margin: 0, fontSize: 12 }}>
+                      Peso cubado = volume × fator (padrão rodoviário ≈ 300 kg/m³).
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* --------- Altura / AET --------- */}
+            {modo === "veiculo" && considerarAltura && (
+              <div className="card">
+                <h2 className="card-title">
+                  <ShieldAlert size={17} /> Altura e licença (AET)
+                </h2>
+                {alturaCargaCalc <= 0 ? (
+                  <p className="muted" style={{ marginTop: 12 }}>
+                    Informe a <strong>altura</strong> dos materiais (coluna Altura) para calcular a
+                    altura da carga.
+                  </p>
+                ) : veiculo ? (
+                  <>
+                    <dl className="dl" style={{ marginTop: 14 }}>
+                      <div className="dl-row">
+                        <dt>Altura da carga {empilhando ? "(empilhada)" : "(maior material)"}</dt>
+                        <dd>
+                          {(alturaCargaCalc * fator).toFixed(0)} {unidade} · {fmt(alturaCargaCalc)} m
+                        </dd>
+                      </div>
+                      <div className="dl-row">
+                        <dt>Assoalho do {veiculo.nome}</dt>
+                        <dd>{fmt(veiculo.alturaPiso)} m</dd>
+                      </div>
+                      <div className="dl-row">
+                        <dt>Altura total (chão→topo)</dt>
+                        <dd>
+                          <strong>{fmt(alturaTotal)} m</strong>
+                        </dd>
+                      </div>
+                      <div className="dl-row">
+                        <dt>Limite legal</dt>
+                        <dd>{fmt(LIMITE_ALTURA)} m</dd>
+                      </div>
+                    </dl>
+                    {licenca.precisa ? (
+                      <div className="aet-alert">
+                        <div className="aet-alert-head">
+                          <ShieldAlert size={16} /> Veículo precisa de licença (AET)
+                        </div>
+                        <ul>
+                          {licenca.motivos.map((m, i) => (
+                            <li key={i}>{m}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : (
+                      <div className="aet-ok">
+                        <ShieldCheck size={16} /> Dentro dos limites — não precisa de licença
                       </div>
                     )}
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
+                  </>
+                ) : (
+                  <p className="muted" style={{ marginTop: 12 }}>
+                    Altura da carga: <strong>{fmt(alturaCargaCalc)} m</strong>. Selecione um veículo
+                    para somar o assoalho e verificar a licença.
+                  </p>
+                )}
+              </div>
+            )}
 
-          {/* Cotação / observações + salvar/imprimir */}
-          <div className="card">
-            <h2 className="card-title">Cotação / Observações</h2>
-            <textarea
-              className="inp obs-area"
-              rows={3}
-              placeholder="Ex.: ID da cotação, cliente, prazo, observações…"
-              value={observacao}
-              onChange={(e) => setObservacao(e.target.value)}
-            />
-            <button
-              className="btn btn-primary"
-              style={{ marginTop: 10, width: "100%" }}
-              onClick={abrirResumo}
-            >
-              🖨️ Salvar / Imprimir
-            </button>
-          </div>
-        </aside>
+            {/* --------- Veículos --------- */}
+            <div className="card">
+              <div className="card-head" style={{ marginBottom: 12 }}>
+                <div>
+                  <h2 className="card-title">
+                    <Truck size={17} /> Veículos
+                  </h2>
+                  <p className="card-desc">Selecione para comparar e editar as medidas (em metros).</p>
+                </div>
+                <button className="btn" onClick={resetarFrota} title="Voltar às medidas padrão">
+                  <RotateCcw size={14} /> Restaurar
+                </button>
+              </div>
+
+              {rec && (
+                <div className="veh-group">
+                  <div className="veh-group-title">Recomendado</div>
+                  <div className="rec">
+                    <span className="rec-eyebrow">Veículo recomendado</span>
+                    <div className="rec-top">
+                      <span className="rec-name">{rec.v.nome}</span>
+                      <span className="rec-tag">Melhor aproveitamento</span>
+                    </div>
+                    {rec.ocupacao != null && (
+                      <>
+                        <div className="rec-pct">
+                          <b>{rec.ocupacao.toFixed(0)}%</b> de ocupação estimada
+                        </div>
+                        <div className="bar">
+                          <i style={{ width: `${Math.min(100, rec.ocupacao).toFixed(0)}%` }} />
+                        </div>
+                      </>
+                    )}
+                    <div className="rec-info">
+                      {fmt(rec.v.comprimento)} m × {fmt(rec.v.largura)} m
+                      {rec.fechado ? ` × ${fmt(rec.v.altura)} m` : ""} · {nomeCarroceria(rec.v.carroceria)} ·{" "}
+                      {rec.v.eixos} · {(rec.v.pesoMax / 1000).toFixed(0)} t
+                    </div>
+                    <div className="rec-status">
+                      <Check size={15} /> Carga compatível
+                    </div>
+                    <button
+                      className={`btn ${veiculoSelecionado === rec.v.id ? "" : "btn-primary"} btn-block`}
+                      style={{ marginTop: 12 }}
+                      onClick={() =>
+                        setVeiculoSelecionado(veiculoSelecionado === rec.v.id ? "" : rec.v.id)
+                      }
+                    >
+                      {veiculoSelecionado === rec.v.id ? "Selecionado" : "Selecionar veículo"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {compat.length > 0 && (
+                <div className="veh-group">
+                  <div className="veh-group-title">Compatíveis</div>
+                  <ul className="veh-list">
+                    {compat.map((x) => (
+                      <VehItem
+                        key={x.v.id}
+                        x={x}
+                        ativo={veiculoSelecionado === x.v.id}
+                        modo={modo}
+                        label={labelStatus(x)}
+                        icon={iconStatus(x.sev)}
+                        onSelect={() =>
+                          setVeiculoSelecionado(veiculoSelecionado === x.v.id ? "" : x.v.id)
+                        }
+                        atualizarVeiculo={atualizarVeiculo}
+                      />
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {incompat.length > 0 && (
+                <div className="veh-group">
+                  <div className="veh-group-title">Incompatíveis</div>
+                  <ul className="veh-list">
+                    {incompat.map((x) => (
+                      <VehItem
+                        key={x.v.id}
+                        x={x}
+                        ativo={veiculoSelecionado === x.v.id}
+                        modo={modo}
+                        label={labelStatus(x)}
+                        icon={iconStatus(x.sev)}
+                        onSelect={() =>
+                          setVeiculoSelecionado(veiculoSelecionado === x.v.id ? "" : x.v.id)
+                        }
+                        atualizarVeiculo={atualizarVeiculo}
+                      />
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            {/* --------- Cotação / salvar --------- */}
+            <div className="card">
+              <h2 className="card-title" style={{ marginBottom: 12 }}>
+                <Tag size={17} /> Cotação / Observações
+              </h2>
+              <textarea
+                className="inp obs-area"
+                rows={3}
+                placeholder="Ex.: ID da cotação, cliente, prazo, observações…"
+                value={observacao}
+                onChange={(e) => setObservacao(e.target.value)}
+              />
+              <button className="btn btn-primary btn-block" style={{ marginTop: 12 }} onClick={abrirResumo}>
+                <Printer size={15} /> Salvar / Imprimir
+              </button>
+            </div>
+          </aside>
+        </div>
       </div>
-    </>
+    </div>
   );
 
   // Reduz a imagem (máx. 1600px) e devolve base64 JPEG.
@@ -1084,4 +1308,99 @@ export default function Cubagem() {
       img.src = url;
     });
   }
+}
+
+/* ---- Card de veículo (compatível / incompatível) com edição ---- */
+function VehItem({ x, ativo, modo, label, icon, onSelect, atualizarVeiculo }) {
+  const v = x.v;
+  const fmt2 = (n, d = 2) => Number(n || 0).toFixed(d).replace(".", ",");
+  return (
+    <li>
+      <button
+        className={`veh ${x.sev} ${ativo ? "on" : ""}`}
+        onClick={onSelect}
+        aria-pressed={ativo}
+      >
+        <div className="veh-head">
+          <span className="veh-name">{v.nome}</span>
+          <span className={`veh-status ${x.sev}`}>
+            {icon} {label}
+          </span>
+        </div>
+        <div className="veh-meta">
+          <span>
+            {fmt2(v.comprimento)}×{fmt2(v.largura)}
+            {x.fechado ? `×${fmt2(v.altura)}` : ""} m · {nomeCarroceria(v.carroceria)} · {v.eixos} ·{" "}
+            {(v.pesoMax / 1000).toFixed(0)} t
+          </span>
+          {x.ocupacao != null && x.cabe && <span className="veh-pct">{x.ocupacao.toFixed(0)}%</span>}
+        </div>
+        {x.motivo && (
+          <div className="veh-reason">
+            <AlertTriangle size={12} /> {x.motivo}
+          </div>
+        )}
+      </button>
+
+      {ativo && (
+        <div className="veh-settings">
+          <div className="veh-settings-title">
+            <Settings2 size={13} /> Configurações do veículo
+          </div>
+          <label className="field">
+            <span>Comprimento (m)</span>
+            <NumInput
+              className="inp"
+              min={0.1}
+              value={v.comprimento}
+              onChange={(n) => atualizarVeiculo(v.id, "comprimento", n)}
+            />
+          </label>
+          <label className="field">
+            <span>Largura (m)</span>
+            <NumInput
+              className="inp"
+              min={0.1}
+              value={v.largura}
+              onChange={(n) => atualizarVeiculo(v.id, "largura", n)}
+            />
+          </label>
+          <label className="field">
+            <span>Carroceria</span>
+            <select
+              className="select"
+              value={v.carroceria}
+              onChange={(e) => atualizarVeiculo(v.id, "carroceria", e.target.value)}
+            >
+              {CARROCERIAS.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.nome}
+                </option>
+              ))}
+            </select>
+          </label>
+          {x.fechado && (
+            <label className="field">
+              <span>Altura interna (m)</span>
+              <NumInput
+                className="inp"
+                min={0.1}
+                value={v.altura}
+                onChange={(n) => atualizarVeiculo(v.id, "altura", n)}
+              />
+            </label>
+          )}
+          <label className="field">
+            <span>Altura do assoalho (m)</span>
+            <NumInput
+              className="inp"
+              min={0}
+              value={v.alturaPiso}
+              onChange={(n) => atualizarVeiculo(v.id, "alturaPiso", n)}
+            />
+          </label>
+        </div>
+      )}
+    </li>
+  );
 }

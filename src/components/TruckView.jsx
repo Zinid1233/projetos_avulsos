@@ -18,6 +18,9 @@ export default function TruckView({
   margem = 0.05,
   fator = 100,
   unidade = "cm",
+  mostrarMedidas = true,
+  mostrarGrade = true,
+  semStatus = false,
 }) {
   const svgRef = useRef(null);
   const drag = useRef(null);
@@ -39,7 +42,7 @@ export default function TruckView({
 
   const c = claro
     ? { piso: "#f5f5f5", borda: "#cccccc", grade: "#e5e5e5", texto: "#888888" }
-    : { piso: "#101010", borda: "#2f2f2f", grade: "#242424", texto: "#7a7a7a" };
+    : { piso: "#0e1013", borda: "#292d34", grade: "#1c1f26", texto: "#747b86" };
 
   const round = (v) => Math.round(v * fator);
   // mostra sempre maior × menor (como o material foi informado)
@@ -167,14 +170,16 @@ export default function TruckView({
 
         {Array.from({ length: Math.floor(comprimentoDesenho) + 1 }).map((_, i) => (
           <g key={`g${i}`}>
-            <line
-              x1={padding + i * escala}
-              y1={padding}
-              x2={padding + i * escala}
-              y2={padding + larguraPlanejamento * escala}
-              stroke={c.grade}
-              strokeWidth={1}
-            />
+            {mostrarGrade && (
+              <line
+                x1={padding + i * escala}
+                y1={padding}
+                x2={padding + i * escala}
+                y2={padding + larguraPlanejamento * escala}
+                stroke={c.grade}
+                strokeWidth={1}
+              />
+            )}
             <text x={padding + i * escala} y={padding - 10} fontSize={11} fill={c.texto} textAnchor="middle">
               {i}m
             </text>
@@ -187,9 +192,9 @@ export default function TruckView({
             y1={padding - 4}
             x2={padding + comprimentoVeiculo * escala}
             y2={padding + larguraPlanejamento * escala + 4}
-            stroke="#e11d2a"
-            strokeWidth={2.5}
-            strokeDasharray="8 5"
+            stroke="#e30613"
+            strokeWidth={1.5}
+            strokeDasharray="7 5"
           />
         )}
 
@@ -225,7 +230,7 @@ export default function TruckView({
                 strokeWidth={1}
                 rx={3}
               />
-              {grande && (
+              {grande && mostrarMedidas && (
                 <text
                   x={x + w / 2}
                   y={doisLinhas ? y + h / 2 - 7 : y + h / 2}
@@ -242,7 +247,7 @@ export default function TruckView({
                     : medida(p)}
                 </text>
               )}
-              {doisLinhas && (
+              {doisLinhas && mostrarMedidas && (
                 <text
                   x={x + w / 2}
                   y={y + h / 2 + 8}
@@ -285,11 +290,17 @@ export default function TruckView({
         </text>
       </svg>
 
-      {comprimentoVeiculo !== undefined && (
-        <p style={{ marginTop: 8, fontSize: 14, color: cabeNoVeiculo ? "var(--green)" : "var(--red)" }}>
+      {!semStatus && comprimentoVeiculo !== undefined && (
+        <p
+          style={{
+            marginTop: 8,
+            fontSize: 13,
+            color: cabeNoVeiculo ? "var(--success, #22c55e)" : "var(--brand-hover, #f11927)",
+          }}
+        >
           {cabeNoVeiculo
-            ? `✓ Cabe no ${nomeVeiculo} (linha vermelha = fim do baú)`
-            : `✗ Ultrapassa o ${nomeVeiculo} (linha vermelha = fim do baú)`}
+            ? `Cabe no ${nomeVeiculo} (linha vermelha = fim do baú)`
+            : `Ultrapassa o ${nomeVeiculo} (linha vermelha = fim do baú)`}
         </p>
       )}
     </div>
